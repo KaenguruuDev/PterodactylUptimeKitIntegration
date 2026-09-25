@@ -1,0 +1,37 @@
+info:
+  name: "UptimeKit Maintenance"
+  identifier: "uptimekitmaintenancetoggle"
+  description: "Manage UptimeKit maintenance windows from the Pterodactyl server console."
+  flags: ""
+  version: "0.1"
+  target: "beta-2026-08"
+  author: "KaenguruuDev"
+  icon: ""
+  website: ""
+
+admin:
+  view: "view.blade.php"
+  controller: "controller.php"
+  css: ""
+  wrapper: ""
+
+dashboard:
+  css: ""
+  wrapper: ""
+  components: "components"
+
+data:
+  directory: ""
+  public: ""
+  console: ""
+
+requests:
+  views: ""
+  app: ""
+  routers:
+    application: ""
+    client: "router-client.php"
+    web: ""
+
+database:
+  migrations: ""

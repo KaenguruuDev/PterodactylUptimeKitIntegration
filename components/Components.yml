@@ -1,0 +1,6 @@
+# Learn more about the Components API:
+# https://blueprint.zip/docs/configs/componentsyml
+
+Server:
+  Terminal:
+    BeforeInformation: "elements/MaintenanceButton"

@@ -1,0 +1,24 @@
+# Blueprint-generated output
+.dist/
+
+# Local mock API state
+maintenance-data.json
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python caches and local tooling output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# JavaScript/tooling output
+node_modules/
+*.tsbuildinfo
+
+# Logs and local editor files
+*.log
+.vscode/
+.idea/
