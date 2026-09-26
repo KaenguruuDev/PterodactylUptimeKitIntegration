@@ -185,8 +185,20 @@
 
           <div class="form-group">
             <label for="apiKey">API key</label>
-            <input id="apiKey" name="apiKey" type="password" class="form-control" value="{{ old('apiKey', $apiKey) }}" autocomplete="new-password" required>
-            <p class="help-block">An UptimeKit API key with permission to read and manage maintenance windows.</p>
+            <input id="apiKey" name="apiKey" type="password" class="form-control" value="" autocomplete="new-password"{{ $apiKeyConfigured ? '' : ' required' }}>
+            <p class="help-block">
+              An UptimeKit API key with permission to read and manage maintenance windows.
+              {{ $apiKeyConfigured ? 'A key is configured; leave this blank to keep it unchanged.' : 'No key is currently configured.' }}
+            </p>
+          </div>
+
+          <div class="form-group">
+            <input name="allowInsecureApiUrl" type="hidden" value="0">
+            <label>
+              <input name="allowInsecureApiUrl" type="checkbox" value="1" {{ old('allowInsecureApiUrl', $allowInsecureApiUrl) ? 'checked' : '' }}>
+              Developer option: allow an insecure HTTP API URL
+            </label>
+            <p class="help-block">Only enable this for local development. HTTP sends the API key without transport encryption.</p>
           </div>
 
           <div class="form-group">

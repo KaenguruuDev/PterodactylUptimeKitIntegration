@@ -66,6 +66,8 @@ An administrator configures the integration from the Pterodactyl extension setti
 6. Enter one or more UptimeKit monitor IDs for each server.
 7. Choose whether the server's Stop and Kill controls require an active maintenance window.
 
+HTTPS is required for the UptimeKit API URL by default. A developer option can allow HTTP for local testing, but it sends the API key without transport encryption and must not be enabled for production endpoints.
+
 After saving, the configured server views load their maintenance windows and availability directly from UptimeKit.
 
 ## A focused workflow for operations teams

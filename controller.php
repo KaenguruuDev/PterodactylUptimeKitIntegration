@@ -2,7 +2,9 @@
 
 namespace Pterodactyl\Http\Controllers\Admin\Extensions\uptimekitmaintenancetoggle;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Validation\Rule;
 use Illuminate\View\Factory as ViewFactory;
 use Illuminate\View\View;
 use Pterodactyl\BlueprintFramework\Libraries\ExtensionLibrary\Admin\BlueprintAdminLibrary as BlueprintExtensionLibrary;
@@ -25,7 +27,8 @@ class UptimekitmaintenancetoggleExtensionController extends Controller
                 'blueprint' => $this->blueprint,
                 'apiUrl' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'apiUrl') ?? '',
                 'organizationSlug' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'organizationSlug') ?? '',
-                'apiKey' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'apiKey') ?? '',
+                'apiKeyConfigured' => (string) ($this->blueprint->dbGet('uptimekitmaintenancetoggle', 'apiKey') ?? '') !== '',
+                'allowInsecureApiUrl' => (bool) ($this->blueprint->dbGet('uptimekitmaintenancetoggle', 'allowInsecureApiUrl') ?? false),
                 'statusPageId' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'statusPageId') ?? '',
                 'serverMonitorMappings' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'serverMonitorMappings') ?? '{}',
             ]
@@ -34,8 +37,16 @@ class UptimekitmaintenancetoggleExtensionController extends Controller
 
     public function update(UptimekitmaintenancetoggleSettingsFormRequest $request): RedirectResponse
     {
-        foreach ($request->only(['apiUrl', 'organizationSlug', 'apiKey', 'statusPageId']) as $key => $value) {
+        foreach ($request->only(['apiUrl', 'organizationSlug', 'statusPageId']) as $key => $value) {
             $this->blueprint->dbSet('uptimekitmaintenancetoggle', $key, $value);
+        }
+        $this->blueprint->dbSet(
+            'uptimekitmaintenancetoggle',
+            'allowInsecureApiUrl',
+            $request->boolean('allowInsecureApiUrl') ? '1' : '0'
+        );
+        if ($request->filled('apiKey')) {
+            $this->blueprint->dbSet('uptimekitmaintenancetoggle', 'apiKey', $request->input('apiKey'));
         }
 
         $mapping = [];
@@ -60,12 +71,39 @@ class UptimekitmaintenancetoggleExtensionController extends Controller
 
 class UptimekitmaintenancetoggleSettingsFormRequest extends AdminFormRequest
 {
+    protected function failedValidation(Validator $validator): void
+    {
+        // Never flash a submitted API key into session-backed old input.
+        $this->request->remove('apiKey');
+        parent::failedValidation($validator);
+    }
+
     public function rules(): array
     {
         return [
-            'apiUrl' => ['required', 'url'],
+            'apiUrl' => [
+                'required',
+                'url',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $scheme = strtolower((string) parse_url((string) $value, PHP_URL_SCHEME));
+                    $allowedSchemes = $this->boolean('allowInsecureApiUrl') ? ['https', 'http'] : ['https'];
+                    if (!in_array($scheme, $allowedSchemes, true)) {
+                        $fail($this->boolean('allowInsecureApiUrl')
+                            ? 'The API URL must use HTTP or HTTPS.'
+                            : 'The API URL must use HTTPS unless insecure HTTP is explicitly enabled.');
+                    }
+                },
+            ],
             'organizationSlug' => ['required', 'string', 'max:255'],
-            'apiKey' => ['required', 'string', 'max:2048'],
+            'apiKey' => [
+                Rule::requiredIf(fn (): bool => (string) (
+                    app(BlueprintExtensionLibrary::class)->dbGet('uptimekitmaintenancetoggle', 'apiKey') ?? ''
+                ) === ''),
+                'nullable',
+                'string',
+                'max:2048',
+            ],
+            'allowInsecureApiUrl' => ['required', 'boolean'],
             'statusPageId' => ['required', 'string', 'max:255'],
             'mappingServerUuids' => ['nullable', 'array'],
             'mappingServerUuids.*' => ['nullable', 'string', 'max:255'],
@@ -80,6 +118,7 @@ class UptimekitmaintenancetoggleSettingsFormRequest extends AdminFormRequest
             'apiUrl' => 'API URL',
             'organizationSlug' => 'organization slug',
             'apiKey' => 'API key',
+            'allowInsecureApiUrl' => 'insecure HTTP developer option',
             'statusPageId' => 'status page ID',
             'mappingServerUuids' => 'server UUID mappings',
             'mappingMonitorIds' => 'monitor ID mappings',
