@@ -42,6 +42,8 @@ Each server mapping has its own stop policy. When the policy is required, the pa
 
 This lets teams connect operational access to their maintenance process. Servers can still use a relaxed policy when stopping should remain available at any time.
 
+The stop policy is intentionally a panel UI workflow aid, not a server-side authorization boundary. It disables the visible Stop and Kill controls in the browser, but users or API clients that already have Pterodactyl's `control.stop` permission can still call the underlying power API directly. Use Pterodactyl permissions when stopping a server must be prevented as an access-control rule.
+
 ## Availability at a glance
 
 The server view includes an availability panel for mapped monitors. Users can switch between three time ranges:
