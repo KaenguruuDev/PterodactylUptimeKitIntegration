@@ -220,6 +220,7 @@ const MaintenanceButton = () => {
   const [statusPageUrl, setStatusPageUrl] = useState<string>();
   const [uptimePercent, setUptimePercent] = useState<number>();
   const placeholderUptimeBuckets = useMemo(() => Array.from({ length: 24 }, () => null), []);
+  const serverApiPath = `/servers/${encodeURIComponent(serverId)}`;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -234,7 +235,7 @@ const MaintenanceButton = () => {
 
   useEffect(() => {
     let mounted = true;
-    void request<MaintenanceListResponse>(`/maintenance?serverId=${encodeURIComponent(serverId)}`)
+    void request<MaintenanceListResponse>(`${serverApiPath}/maintenance`)
       .then((remote) => {
         if (!mounted) return;
         setIsConfigured(remote.configured);
@@ -249,7 +250,7 @@ const MaintenanceButton = () => {
     return () => {
       mounted = false;
     };
-  }, [serverId]);
+  }, [serverApiPath]);
 
   useEffect(() => {
     let mounted = true;
@@ -272,7 +273,7 @@ const MaintenanceButton = () => {
     setUptimeBuckets([]);
     setStatusPageUrl(statusPageUrlCache.get(serverId));
     setUptimePercent(undefined);
-    void request<UptimeResponse>(`/uptime?serverId=${encodeURIComponent(serverId)}&range=${uptimeRange}`)
+    void request<UptimeResponse>(`${serverApiPath}/uptime?range=${uptimeRange}`)
       .then((remote) => {
         if (!mounted) return;
         uptimeResponseCache.set(cacheKey, remote);
@@ -297,7 +298,7 @@ const MaintenanceButton = () => {
     return () => {
       mounted = false;
     };
-  }, [serverId, uptimeRange]);
+  }, [serverApiPath, serverId, uptimeRange]);
 
   useEffect(() => {
     const isStopControl = (button: HTMLButtonElement) => {
@@ -379,15 +380,15 @@ const MaintenanceButton = () => {
 
     try {
       if (editingId) {
-        const saved = await request<MaintenanceWindow>(`/maintenance/${encodeURIComponent(editingId)}`, {
+        const saved = await request<MaintenanceWindow>(`${serverApiPath}/maintenance/${encodeURIComponent(editingId)}`, {
           method: 'PATCH',
-          body: JSON.stringify({ serverId, startAt, endAt }),
+          body: JSON.stringify({ startAt, endAt }),
         });
         setWindows((current) => current.map((window) => (window.id === editingId ? { ...next, ...saved } : window)));
       } else {
-        const saved = await request<MaintenanceWindow>('/maintenance', {
+        const saved = await request<MaintenanceWindow>(`${serverApiPath}/maintenance`, {
           method: 'POST',
-          body: JSON.stringify({ serverId, ...next }),
+          body: JSON.stringify(next),
         });
         setWindows((current) => [...current, saved]);
       }
@@ -408,7 +409,7 @@ const MaintenanceButton = () => {
     const id = pendingDeleteId;
     setIsLoading(true);
     try {
-      await request(`/maintenance/${encodeURIComponent(id)}?serverId=${encodeURIComponent(serverId)}`, { method: 'DELETE' });
+      await request(`${serverApiPath}/maintenance/${encodeURIComponent(id)}`, { method: 'DELETE' });
       setWindows((current) => current.filter((window) => window.id !== id));
       if (editingId === id) resetEditor();
     } catch (requestError: unknown) {

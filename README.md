@@ -30,6 +30,8 @@ Users can create a window with:
 - A start date and time
 - An end date and time
 
+Maintenance data is scoped through Pterodactyl's authenticated server routes. Server members can view it, while creating, editing, or deleting windows requires the server's `control.stop` permission. A window can only be changed through a server when all of its associated monitors belong to that server's configured mapping.
+
 Active windows are clearly marked. Scheduled and completed windows remain available for review, with recent history kept visible in the panel for up to 30 days.
 
 Editing a window updates its time range in UptimeKit. Deleting a window removes it from the connected UptimeKit maintenance schedule after confirmation.
