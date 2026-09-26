@@ -6,7 +6,7 @@ info:
   version: "0.1"
   target: "beta-2026-08"
   author: "KaenguruuDev"
-  icon: ""
+  icon: "assets/uptimekit-maintenance-logo.svg"
   website: ""
 
 admin:
