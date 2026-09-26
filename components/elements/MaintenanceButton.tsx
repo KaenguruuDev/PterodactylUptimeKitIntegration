@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/elements/button';
 import { Dialog } from '@/components/elements/dialog';
 import { ServerContext } from '@/state/server';
+import consoleStyles from '@/components/server/console/style.module.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCalendarAlt, faCheckCircle, faClock, faPencilAlt, faTrashAlt } from '@fortawesome/free-solid-svg-icons';
 
@@ -20,6 +21,22 @@ type MaintenanceListResponse = {
   configured: boolean;
   enforceStop: boolean;
   windows: MaintenanceWindow[];
+};
+
+type UptimeRange = '24h' | '7d' | '28d';
+type UptimeStatus = 'operational' | 'degraded' | 'partial_outage' | 'major_outage' | 'maintenance';
+type UptimeBucket = {
+  startAt: string;
+  endAt: string;
+  status: UptimeStatus;
+  titles?: string[];
+};
+type UptimeResponse = {
+  configured: boolean;
+  range: UptimeRange;
+  statusPageUrl?: string | null;
+  uptimePercent?: number;
+  buckets: UptimeBucket[];
 };
 
 const API_BASE = '/api/client/extensions/uptimekitmaintenancetoggle';
@@ -102,6 +119,29 @@ const formatDate = (value: string) => {
       });
 };
 
+const formatUptimeRange = (startAt: string, endAt: string) => {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Unknown time range';
+  return `${start.toLocaleString(getBrowserLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleString(getBrowserLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+};
+
+const uptimePresentation: Record<UptimeStatus, { label: string; className: string }> = {
+  operational: { label: 'Operational', className: 'bg-green-500' },
+  degraded: { label: 'Degraded', className: 'bg-yellow-400' },
+  partial_outage: { label: 'Partial outage', className: 'bg-orange-500' },
+  major_outage: { label: 'Major outage', className: 'bg-red-500' },
+  maintenance: { label: 'Maintenance', className: 'bg-blue-500' },
+};
+
+const ExternalLinkIcon = () => (
+  <svg className={'h-5 w-5'} viewBox={'0 0 24 24'} fill={'none'} stroke={'currentColor'} strokeWidth={1.75} strokeLinecap={'round'} strokeLinejoin={'round'} aria-hidden>
+    <path d={'M14 3h7v7'} />
+    <path d={'M10 14 21 3'} />
+    <path d={'M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5'} />
+  </svg>
+);
+
 const toDateTimeLocal = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
@@ -165,6 +205,13 @@ const MaintenanceButton = () => {
   const [isConfigured, setIsConfigured] = useState(false);
   const [enforceStop, setEnforceStop] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+  const [uptimeRange, setUptimeRange] = useState<UptimeRange>('24h');
+  const [uptimeBuckets, setUptimeBuckets] = useState<UptimeBucket[]>([]);
+  const [isUptimeConfigured, setIsUptimeConfigured] = useState(false);
+  const [isUptimeLoading, setIsUptimeLoading] = useState(true);
+  const [uptimeError, setUptimeError] = useState<string>();
+  const [statusPageUrl, setStatusPageUrl] = useState<string>();
+  const [uptimePercent, setUptimePercent] = useState<number>();
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -195,6 +242,34 @@ const MaintenanceButton = () => {
       mounted = false;
     };
   }, [serverId]);
+
+  useEffect(() => {
+    let mounted = true;
+    setIsUptimeLoading(true);
+    setUptimeError(undefined);
+    void request<UptimeResponse>(`/uptime?serverId=${encodeURIComponent(serverId)}&range=${uptimeRange}`)
+      .then((remote) => {
+        if (!mounted) return;
+        setIsUptimeConfigured(remote.configured);
+        setUptimeBuckets(remote.buckets || []);
+        setStatusPageUrl(remote.statusPageUrl || undefined);
+        setUptimePercent(typeof remote.uptimePercent === 'number' ? remote.uptimePercent : undefined);
+      })
+      .catch((requestError: unknown) => {
+        if (!mounted) return;
+        setIsUptimeConfigured(false);
+        setUptimeBuckets([]);
+        setStatusPageUrl(undefined);
+        setUptimePercent(undefined);
+        setUptimeError(requestError instanceof Error ? requestError.message : 'Could not load uptime history.');
+      })
+      .finally(() => {
+        if (mounted) setIsUptimeLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [serverId, uptimeRange]);
 
   useEffect(() => {
     const isStopControl = (button: HTMLButtonElement) => {
@@ -335,6 +410,81 @@ const MaintenanceButton = () => {
           <span>Maintenance</span>
         </span>
       </Button.Text>
+
+      {(isUptimeConfigured || isUptimeLoading || uptimeError) && (
+        <section className={'mt-3'} aria-label={'Uptime history'}>
+          <div className={`${consoleStyles.stat_block} w-full bg-gray-600`}>
+            <div className={'min-w-0 w-full'}>
+              <div className={'mb-2 flex items-center justify-between gap-3'}>
+                <p className={'text-sm font-semibold text-gray-50'}>Uptime history</p>
+                <div className={'flex rounded border border-neutral-600 p-0.5'} aria-label={'Uptime range'}>
+                  {(['24h', '7d', '28d'] as UptimeRange[]).map((range) => (
+                    <button
+                      key={range}
+                      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${uptimeRange === range ? 'bg-blue-500 text-white' : 'text-neutral-300 hover:bg-neutral-700'}`}
+                      type={'button'}
+                      aria-pressed={uptimeRange === range}
+                      onClick={() => setUptimeRange(range)}
+                    >
+                      {range}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {isUptimeLoading ? (
+                <p className={'text-xs text-neutral-300'}>Loading uptime history…</p>
+              ) : uptimeError ? (
+                <p className={'text-xs text-red-200'}>{uptimeError}</p>
+              ) : (
+                <>
+                  <div
+                    className={'rounded p-2'}
+                    style={{ backgroundColor: 'var(--item-secondary-color, rgb(55 65 81))' }}
+                  >
+                    <div
+                      className={'grid h-5 gap-px'}
+                      style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}
+                      role={'list'}
+                      aria-label={`Uptime history for the last ${uptimeRange}`}
+                    >
+                      {uptimeBuckets.map((bucket) => {
+                        const presentation = uptimePresentation[bucket.status];
+                        const details = [formatUptimeRange(bucket.startAt, bucket.endAt), presentation.label, ...(bucket.titles || [])].join(': ');
+                        return (
+                          <span
+                            key={`${bucket.startAt}-${bucket.endAt}`}
+                            className={`min-w-0 rounded-sm ${presentation.className}`}
+                            role={'listitem'}
+                            title={details}
+                            aria-label={details}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className={'mt-2 flex items-center justify-between'}>
+                    <p className={'text-xs font-semibold text-neutral-200'}>
+                      {uptimePercent === undefined ? '—' : `${uptimePercent.toFixed(2)}%`} uptime
+                    </p>
+                    {statusPageUrl && (
+                      <a
+                        className={'inline-flex h-7 w-7 items-center justify-center rounded text-neutral-300 hover:bg-neutral-700 hover:text-gray-50'}
+                        href={statusPageUrl}
+                        target={'_blank'}
+                        rel={'noreferrer'}
+                        title={'Open status page'}
+                        aria-label={'Open status page in a new tab'}
+                      >
+                        <ExternalLinkIcon />
+                      </a>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <Dialog
         open={isOpen}

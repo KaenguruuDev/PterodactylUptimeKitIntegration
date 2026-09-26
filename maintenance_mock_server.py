@@ -68,6 +68,24 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         item_id = maintenance_id(parsed.path)
 
+        if parsed.path == "/incidents":
+            self.send_json(200, {"items": [], "total": 0})
+            return
+
+        status_page_parts = [part for part in parsed.path.split("/") if part]
+        if len(status_page_parts) == 2 and status_page_parts[0] == "status-pages":
+            status_page_id = status_page_parts[1]
+            host = self.headers.get("Host", f"localhost:{PORT}")
+            self.send_json(
+                200,
+                {
+                    "id": status_page_id,
+                    "slug": status_page_id,
+                    "url": f"http://{host}/status/{status_page_id}",
+                },
+            )
+            return
+
         with LOCK:
             windows = read_windows()
 
