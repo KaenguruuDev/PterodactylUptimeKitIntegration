@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/elements/button';
 import { Dialog } from '@/components/elements/dialog';
+import Icon from '@/components/elements/Icon';
 import { ServerContext } from '@/state/server';
 import consoleStyles from '@/components/server/console/style.module.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -553,22 +554,26 @@ const MaintenanceButton = () => {
                   </div>
                   <div className={'flex flex-none gap-1.5'}>
                     <Button
-                      className={'px-2.5'}
+                      style={{ padding: '0.375rem 0.625rem' }}
                       type={'button'}
                       aria-label={`Edit ${window.title}`}
                       title={'Edit maintenance window'}
                       onClick={() => editWindow(window)}
                     >
-                      <FontAwesomeIcon icon={faPencilAlt} fixedWidth />
+                      <span className={'flex h-4 w-4 items-center justify-center'}>
+                        <Icon className={'h-3.5 w-3.5'} icon={faPencilAlt} />
+                      </span>
                     </Button>
                     <Button.Danger
-                      className={'px-2.5'}
+                      style={{ padding: '0.375rem 0.625rem' }}
                       type={'button'}
                       aria-label={`Delete ${window.title}`}
                       title={'Delete maintenance window'}
                       onClick={() => deleteWindow(window.id)}
                     >
-                      <FontAwesomeIcon icon={faTrashAlt} fixedWidth />
+                      <span className={'flex h-4 w-4 items-center justify-center'}>
+                        <Icon className={'h-3.5 w-3.5'} icon={faTrashAlt} />
+                      </span>
                     </Button.Danger>
                   </div>
                 </div>
