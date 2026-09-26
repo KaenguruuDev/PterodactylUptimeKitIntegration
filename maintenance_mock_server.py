@@ -9,6 +9,7 @@ Data is stored in maintenance-data.json next to this file.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,8 +17,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 
-HOST = "127.0.0.1"
-PORT = 8765
+HOST = os.environ.get("MAINTENANCE_MOCK_HOST", "0.0.0.0")
+PORT = int(os.environ.get("MAINTENANCE_MOCK_PORT", "8765"))
 DATA_FILE = Path(__file__).with_name("maintenance-data.json")
 LOCK = threading.Lock()
 

@@ -2,14 +2,17 @@
   $decodedMappings = json_decode($serverMonitorMappings, true);
   $mappingRows = [];
   if (is_array($decodedMappings)) {
-    foreach ($decodedMappings as $serverUuid => $monitorIds) {
+    foreach ($decodedMappings as $serverUuid => $mapping) {
+      $isStructuredMapping = is_array($mapping) && array_key_exists('monitorIds', $mapping);
+      $monitorIds = $isStructuredMapping ? $mapping['monitorIds'] : $mapping;
       $mappingRows[] = [
         'serverUuid' => $serverUuid,
         'monitorIds' => is_array($monitorIds) ? implode(', ', $monitorIds) : $monitorIds,
+        'enforceStop' => $isStructuredMapping ? ($mapping['enforceStop'] ?? true) : true,
       ];
     }
   }
-  if (count($mappingRows) === 0) $mappingRows[] = ['serverUuid' => '', 'monitorIds' => ''];
+  if (count($mappingRows) === 0) $mappingRows[] = ['serverUuid' => '', 'monitorIds' => '', 'enforceStop' => true];
 @endphp
 
 <style>
@@ -88,13 +91,21 @@
             <div id="server-monitor-mappings" class="uptimekit-mapping-list">
               @foreach ($mappingRows as $mappingRow)
                 <div class="row uptimekit-mapping-row">
-                  <div class="col-sm-5 form-group">
+                  <div class="col-sm-4 form-group">
                     <label>Server UUID</label>
                     <input name="mappingServerUuids[]" type="text" class="form-control" value="{{ $mappingRow['serverUuid'] }}" placeholder="Pterodactyl server UUID">
                   </div>
-                  <div class="col-sm-5 form-group">
+                  <div class="col-sm-4 form-group">
                     <label>Monitor IDs</label>
                     <input name="mappingMonitorIds[]" type="text" class="form-control" value="{{ $mappingRow['monitorIds'] }}" placeholder="UptimeKit monitor ID(s), comma-separated">
+                  </div>
+                  <div class="col-sm-2 form-group">
+                    <label>Stop policy</label>
+                    <input name="mappingEnforceStop[]" type="hidden" value="{{ $mappingRow['enforceStop'] ? '1' : '0' }}">
+                    <label class="checkbox-inline" style="padding-left: 0; text-transform: none; font-weight: normal;">
+                      <input class="mapping-enforce-stop" type="checkbox" {{ $mappingRow['enforceStop'] ? 'checked' : '' }}>
+                      Require active window
+                    </label>
                   </div>
                   <div class="col-sm-2 uptimekit-mapping-actions">
                     <button type="button" class="btn btn-danger btn-sm remove-mapping" title="Remove server mapping" aria-label="Remove server mapping"><i class="fa fa-trash"></i></button>
@@ -118,7 +129,14 @@
   document.getElementById('add-mapping').addEventListener('click', function () {
     var row = document.querySelector('.uptimekit-mapping-row').cloneNode(true);
     row.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+    row.querySelector('.mapping-enforce-stop').checked = true;
+    row.querySelector('input[name="mappingEnforceStop[]"]').value = '1';
     document.getElementById('server-monitor-mappings').appendChild(row);
+  });
+
+  document.getElementById('server-monitor-mappings').addEventListener('change', function (event) {
+    if (!event.target.classList.contains('mapping-enforce-stop')) return;
+    event.target.closest('.uptimekit-mapping-row').querySelector('input[name="mappingEnforceStop[]"]').value = event.target.checked ? '1' : '0';
   });
 
   document.getElementById('server-monitor-mappings').addEventListener('click', function (event) {

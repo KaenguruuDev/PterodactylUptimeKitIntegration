@@ -41,10 +41,16 @@ class UptimekitmaintenancetoggleExtensionController extends Controller
         $mapping = [];
         $serverUuids = $request->input('mappingServerUuids', []);
         $monitorIds = $request->input('mappingMonitorIds', []);
+        $enforceStops = $request->input('mappingEnforceStop', []);
         foreach ($serverUuids as $index => $serverUuid) {
             $serverUuid = trim((string) $serverUuid);
             $monitors = array_values(array_filter(array_map('trim', explode(',', (string) ($monitorIds[$index] ?? '')))));
-            if ($serverUuid !== '' && count($monitors) > 0) $mapping[$serverUuid] = $monitors;
+            if ($serverUuid !== '' && count($monitors) > 0) {
+                $mapping[$serverUuid] = [
+                    'monitorIds' => $monitors,
+                    'enforceStop' => (string) ($enforceStops[$index] ?? '1') === '1',
+                ];
+            }
         }
         $this->blueprint->dbSet('uptimekitmaintenancetoggle', 'serverMonitorMappings', json_encode($mapping));
 

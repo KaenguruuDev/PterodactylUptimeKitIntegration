@@ -16,6 +16,11 @@ type MaintenanceWindow = {
 };
 
 type MaintenanceDraft = Pick<MaintenanceWindow, 'title' | 'description' | 'startAt' | 'endAt'>;
+type MaintenanceListResponse = {
+  configured: boolean;
+  enforceStop: boolean;
+  windows: MaintenanceWindow[];
+};
 
 const API_BASE = '/api/client/extensions/uptimekitmaintenancetoggle';
 const emptyDraft: MaintenanceDraft = { title: '', description: '', startAt: '', endAt: '' };
@@ -66,16 +71,22 @@ const DateTimeField = ({
   );
 };
 
-const request = async <T,>(path: string, init?: RequestInit): Promise<T | undefined> => {
-  try {
-    const response = await fetch(`${API_BASE}${path}`, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    });
-    return response.ok ? ((await response.json()) as T) : undefined;
-  } catch {
-    return undefined;
+const request = async <T,>(path: string, init?: RequestInit): Promise<T> => {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+      ...(init?.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    const message = payload && typeof payload === 'object' && 'message' in payload ? String(payload.message) : `Request failed (${response.status})`;
+    throw new Error(message);
   }
+  return payload as T;
 };
 
 const formatDate = (value: string) => {
@@ -108,6 +119,13 @@ const getStatus = (window: MaintenanceWindow) => {
   return now < start ? ('scheduled' as const) : ('completed' as const);
 };
 
+const isVisibleWindow = (window: MaintenanceWindow) => {
+  const end = new Date(window.endAt).getTime();
+  if (Number.isNaN(end)) return false;
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return end >= thirtyDaysAgo;
+};
+
 const getStatusPresentation = (status: MaintenanceWindow['status']) => {
   switch (status) {
     case 'in_progress':
@@ -136,6 +154,7 @@ const getStatusPresentation = (status: MaintenanceWindow['status']) => {
 
 const MaintenanceButton = () => {
   const serverId = ServerContext.useStoreState((state) => state.server.data!.uuid);
+  const serverStatus = ServerContext.useStoreState((state) => state.status.value);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editingId, setEditingId] = useState<string>();
@@ -143,15 +162,35 @@ const MaintenanceButton = () => {
   const [draft, setDraft] = useState<MaintenanceDraft>(emptyDraft);
   const [windows, setWindows] = useState<MaintenanceWindow[]>([]);
   const [error, setError] = useState<string>();
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [enforceStop, setEnforceStop] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
 
-  const currentWindows = useMemo(() => windows.map((window) => ({ ...window, status: getStatus(window) })), [windows]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const currentWindows = useMemo(
+    () => windows.filter(isVisibleWindow).map((window) => ({ ...window, status: getStatus(window) })),
+    [windows, now]
+  );
   const hasActiveWindow = currentWindows.some((window) => window.status === 'in_progress');
 
   useEffect(() => {
     let mounted = true;
-    void request<MaintenanceWindow[]>(`/maintenance?serverId=${encodeURIComponent(serverId)}`).then((remote) => {
-      if (mounted && remote) setWindows(remote);
-    });
+    void request<MaintenanceListResponse>(`/maintenance?serverId=${encodeURIComponent(serverId)}`)
+      .then((remote) => {
+        if (!mounted) return;
+        setIsConfigured(remote.configured);
+        setEnforceStop(remote.enforceStop ?? true);
+        setWindows(remote.windows || []);
+      })
+      .catch((requestError: unknown) => {
+        if (!mounted) return;
+        setIsConfigured(true);
+        setError(requestError instanceof Error ? requestError.message : 'Could not load maintenance windows.');
+      });
     return () => {
       mounted = false;
     };
@@ -159,23 +198,23 @@ const MaintenanceButton = () => {
 
   useEffect(() => {
     const isStopControl = (button: HTMLButtonElement) => {
-      const label = button.textContent?.trim();
-      return label === 'Stop' || label === 'Kill';
+      const label = button.textContent?.replace(/\s+/g, ' ').trim().toLowerCase();
+      return label === 'stop' || label === 'kill';
     };
     const syncStopControls = () => {
       document.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
         if (!isStopControl(button)) return;
-        const disabled = !hasActiveWindow;
+        const disabled = serverStatus === 'offline' || (enforceStop && !hasActiveWindow);
         if (button.disabled !== disabled) button.disabled = disabled;
         button.title = disabled
-          ? 'An active maintenance window is required to stop this server'
+          ? 'Create an active maintenance window before stopping this server'
           : 'Stop the server';
         button.setAttribute('aria-disabled', String(disabled));
       });
     };
     const preventInactiveStop = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null;
-      if (target && isStopControl(target) && !hasActiveWindow) {
+      if (target && isStopControl(target) && serverStatus !== 'offline' && enforceStop && !hasActiveWindow) {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -189,13 +228,15 @@ const MaintenanceButton = () => {
       observer.disconnect();
       document.removeEventListener('click', preventInactiveStop, true);
     };
-  }, [hasActiveWindow]);
+  }, [enforceStop, hasActiveWindow, serverStatus]);
 
   const resetEditor = () => {
     setEditingId(undefined);
     setDraft(emptyDraft);
     setError(undefined);
   };
+
+  if (!isConfigured) return null;
 
   const editWindow = (window: MaintenanceWindow) => {
     setEditingId(window.id);
@@ -233,22 +274,26 @@ const MaintenanceButton = () => {
       monitorIds: previous?.monitorIds,
     };
 
-    if (editingId) {
-      await request(`/maintenance/${encodeURIComponent(editingId)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ serverId, startAt, endAt }),
-      });
-      setWindows((current) => current.map((window) => (window.id === editingId ? next : window)));
-    } else {
-      await request('/maintenance', {
-        method: 'POST',
-        body: JSON.stringify({ serverId, ...next }),
-      });
-      setWindows((current) => [...current, next]);
+    try {
+      if (editingId) {
+        const saved = await request<MaintenanceWindow>(`/maintenance/${encodeURIComponent(editingId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ serverId, startAt, endAt }),
+        });
+        setWindows((current) => current.map((window) => (window.id === editingId ? { ...next, ...saved } : window)));
+      } else {
+        const saved = await request<MaintenanceWindow>('/maintenance', {
+          method: 'POST',
+          body: JSON.stringify({ serverId, ...next }),
+        });
+        setWindows((current) => [...current, saved]);
+      }
+      resetEditor();
+    } catch (requestError: unknown) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not save maintenance window.');
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
-    resetEditor();
   };
 
   const deleteWindow = async (id: string) => {
@@ -259,10 +304,15 @@ const MaintenanceButton = () => {
     if (!pendingDeleteId) return;
     const id = pendingDeleteId;
     setIsLoading(true);
-    await request(`/maintenance/${encodeURIComponent(id)}?serverId=${encodeURIComponent(serverId)}`, { method: 'DELETE' });
-    setWindows((current) => current.filter((window) => window.id !== id));
-    if (editingId === id) resetEditor();
-    setIsLoading(false);
+    try {
+      await request(`/maintenance/${encodeURIComponent(id)}?serverId=${encodeURIComponent(serverId)}`, { method: 'DELETE' });
+      setWindows((current) => current.filter((window) => window.id !== id));
+      if (editingId === id) resetEditor();
+    } catch (requestError: unknown) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not delete maintenance window.');
+    } finally {
+      setIsLoading(false);
+    }
     setPendingDeleteId(undefined);
   };
 

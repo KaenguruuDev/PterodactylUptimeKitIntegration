@@ -11,12 +11,15 @@ $configuration = static function (BlueprintAdminLibrary $blueprint, Request $req
         (string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'serverMonitorMappings') ?? '{}'),
         true
     );
-    $monitorIds = is_array($mappings) ? ($mappings[$serverId] ?? []) : [];
+    $mapping = is_array($mappings) ? ($mappings[$serverId] ?? []) : [];
+    $isStructuredMapping = is_array($mapping) && array_key_exists('monitorIds', $mapping);
+    $monitorIds = $isStructuredMapping ? ($mapping['monitorIds'] ?? []) : $mapping;
     $monitorIds = is_array($monitorIds) ? array_values($monitorIds) : [$monitorIds];
 
     return [
         'serverId' => $serverId,
         'monitorIds' => array_values(array_filter($monitorIds)),
+        'enforceStop' => $isStructuredMapping ? (bool) ($mapping['enforceStop'] ?? true) : true,
         'statusPageId' => (string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'statusPageId') ?? ''),
         'apiUrl' => rtrim((string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'apiUrl') ?? ''), '/'),
         'organizationSlug' => (string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'organizationSlug') ?? ''),
@@ -27,6 +30,7 @@ $configuration = static function (BlueprintAdminLibrary $blueprint, Request $req
 $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, string $method, ?string $id = null) use ($configuration) {
     $config = $configuration($blueprint, $request);
     if ($config['serverId'] === '' || count($config['monitorIds']) === 0) {
+        if ($method === 'GET') return response()->json(['configured' => false, 'windows' => []]);
         return response()->json(['message' => 'No UptimeKit monitor mapping exists for this server.'], 422);
     }
     if ($config['apiUrl'] === '' || $config['apiKey'] === '') {
@@ -36,12 +40,10 @@ $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, 
     $client = Http::withToken($config['apiKey'])
         ->acceptJson()
         ->withHeaders(['X-Organization-Slug' => $config['organizationSlug']]);
-    $path = '/incidents'.($id ? '/'.rawurlencode($id) : '');
+    $path = '/maintenance'.($id ? '/'.rawurlencode($id) : '');
 
     if ($method === 'GET') {
         $response = $client->get($config['apiUrl'].$path, [
-            'status' => 'all',
-            'severity' => 'maintenance',
             'statusPageId' => $config['statusPageId'],
         ]);
     } elseif ($method === 'POST') {
@@ -54,11 +56,11 @@ $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, 
         $response = $client->post($config['apiUrl'].$path, [
             'title' => $body['title'],
             'description' => $body['description'] ?? '',
-            'severity' => 'maintenance',
+            'status' => 'scheduled',
             'monitorIds' => $config['monitorIds'],
-            'statusPageIds' => [$config['statusPageId']],
-            'startedAt' => $body['startAt'],
-            'plannedEndAt' => $body['endAt'],
+            'statusPageId' => $config['statusPageId'],
+            'startAt' => $body['startAt'],
+            'endAt' => $body['endAt'],
         ]);
     } elseif ($method === 'PATCH') {
         $body = $request->validate([
@@ -66,8 +68,8 @@ $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, 
             'endAt' => ['required', 'date', 'after:startAt'],
         ]);
         $response = $client->patch($config['apiUrl'].$path, [
-            'startedAt' => $body['startAt'],
-            'plannedEndAt' => $body['endAt'],
+            'startAt' => $body['startAt'],
+            'endAt' => $body['endAt'],
         ]);
     } else {
         $response = $client->delete($config['apiUrl'].$path);
@@ -87,16 +89,23 @@ $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, 
         return count(array_intersect($config['monitorIds'], is_array($itemMonitorIds) ? $itemMonitorIds : [])) > 0;
     }));
 
-    return response()->json(array_map(static function (array $item): array {
+    $windows = array_map(static function (array $item): array {
         return [
             'id' => (string) ($item['id'] ?? ''),
             'title' => (string) ($item['title'] ?? ''),
             'description' => (string) ($item['description'] ?? ''),
-            'startAt' => $item['startedAt'] ?? null,
-            'endAt' => $item['plannedEndAt'] ?? $item['endedAt'] ?? null,
+            'startAt' => $item['startAt'] ?? null,
+            'endAt' => $item['endAt'] ?? null,
+            'status' => $item['status'] ?? null,
             'monitorIds' => $item['monitorIds'] ?? [],
         ];
-    }, $items));
+    }, $items);
+
+    return response()->json([
+        'configured' => true,
+        'enforceStop' => $config['enforceStop'],
+        'windows' => $windows,
+    ]);
 };
 
 Route::get('/maintenance', fn (BlueprintAdminLibrary $blueprint, Request $request) => $forward($blueprint, $request, 'GET'));
