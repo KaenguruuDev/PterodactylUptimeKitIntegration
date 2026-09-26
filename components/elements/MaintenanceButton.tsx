@@ -66,6 +66,7 @@ const DateTimeField = ({
       <div className={'grid gap-2 sm:grid-cols-5'}>
         <input
           className={'min-w-0 w-full rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-sm text-gray-50 sm:col-span-3'}
+          style={themedSecondarySurface}
           type={'date'}
           value={date}
           onChange={(event) => update(event.target.value, time)}
@@ -73,6 +74,7 @@ const DateTimeField = ({
         />
         <input
           className={'min-w-0 w-full rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-sm text-gray-50 sm:col-span-2'}
+          style={themedSecondarySurface}
           type={'text'}
           inputMode={'numeric'}
           placeholder={'HH:mm'}
@@ -133,6 +135,8 @@ const uptimePresentation: Record<UptimeStatus, { label: string; className: strin
   major_outage: { label: 'Major outage', className: 'bg-red-500' },
   maintenance: { label: 'Maintenance', className: 'bg-blue-500' },
 };
+
+const themedSecondarySurface = { backgroundColor: 'var(--item-secondary-color, rgb(38 38 38))' };
 
 const ExternalLinkIcon = () => (
   <svg className={'h-5 w-5'} viewBox={'0 0 24 24'} fill={'none'} stroke={'currentColor'} strokeWidth={1.75} strokeLinecap={'round'} strokeLinejoin={'round'} aria-hidden>
@@ -504,7 +508,7 @@ const MaintenanceButton = () => {
           ) : (
             <div className={'grid gap-2'}>
               {currentWindows.map((window) => (
-                <div key={window.id} className={'flex min-w-0 items-start gap-3 rounded border border-neutral-700 bg-neutral-800 p-3'}>
+                <div key={window.id} className={'flex min-w-0 items-start gap-3 rounded border border-neutral-700 bg-neutral-800 p-3'} style={themedSecondarySurface}>
                   {(() => {
                     const presentation = getStatusPresentation(window.status);
                     return (
@@ -551,8 +555,8 @@ const MaintenanceButton = () => {
 
           <form className={'grid gap-3 border-t border-neutral-600 pt-4'} onSubmit={saveWindow}>
             <h3 className={'font-semibold text-gray-50'}>{editingId ? 'Update window' : 'Create window'}</h3>
-            <input className={'min-w-0 w-full rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-sm text-gray-50'} placeholder={'Title'} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required />
-            <textarea className={'min-w-0 w-full rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-sm text-gray-50'} placeholder={'Description'} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} rows={3} />
+            <input className={'min-w-0 w-full rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-sm text-gray-50'} style={themedSecondarySurface} placeholder={'Title'} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required />
+            <textarea className={'min-w-0 w-full rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-sm text-gray-50'} style={themedSecondarySurface} placeholder={'Description'} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} rows={3} />
             <div className={'grid gap-3 sm:grid-cols-2'}>
               <DateTimeField label={'Starts'} value={draft.startAt} onChange={(startAt) => setDraft({ ...draft, startAt })} />
               <DateTimeField label={'Ends'} value={draft.endAt} onChange={(endAt) => setDraft({ ...draft, endAt })} />
