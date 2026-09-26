@@ -57,7 +57,7 @@
 
   .uptimekit-mapping-row {
     margin: 0;
-    padding: 15px;
+    padding: 12px 15px;
   }
 
   .uptimekit-mapping-row .form-group {
@@ -104,6 +104,10 @@
     margin-top: -4px;
   }
 
+  .uptimekit-add-button .fa {
+    margin-right: 5px;
+  }
+
   @media (max-width: 767px) {
     .uptimekit-mapping-row {
       padding: 10px;
@@ -119,8 +123,41 @@
   }
 
   @media (min-width: 768px) {
+    .uptimekit-mapping-table-header,
+    .uptimekit-mapping-row {
+      display: grid;
+      grid-template-columns: 4fr 4fr 3fr 1fr;
+      column-gap: 20px;
+    }
+
+    .uptimekit-mapping-table-header::before,
+    .uptimekit-mapping-table-header::after,
+    .uptimekit-mapping-row::before,
+    .uptimekit-mapping-row::after {
+      content: none;
+      display: none;
+    }
+
     .uptimekit-mapping-table-header {
-      display: block;
+      align-items: start;
+      padding: 0 15px;
+    }
+
+    .uptimekit-mapping-table-header > [class*='col-'],
+    .uptimekit-mapping-row > [class*='col-'] {
+      float: none;
+      width: auto;
+      min-width: 0;
+      padding-right: 0;
+      padding-left: 0;
+    }
+
+    .uptimekit-mapping-row {
+      align-items: center;
+    }
+
+    .uptimekit-mapping-row .mapping-enforce-stop-label {
+      justify-content: flex-start;
     }
 
     .uptimekit-mapping-row .mapping-column-label {
@@ -130,12 +167,8 @@
 </style>
 
 <div class="row">
-  <div class="col-xs-12 col-lg-10 col-lg-offset-1">
+  <div class="col-xs-12">
     <div class="box uptimekit-config-box">
-      <div class="box-header with-border">
-        <h3 class="box-title">UptimeKit maintenance configuration</h3>
-      </div>
-
       <form action="{{ $root }}" method="POST">
         <div class="box-body">
           <div class="form-group">
@@ -165,7 +198,7 @@
           <div class="form-group uptimekit-mapping-section">
             <div class="clearfix">
               <p class="uptimekit-mapping-heading pull-left">Server monitor mappings</p>
-              <button type="button" id="add-mapping" class="btn btn-primary btn-xs pull-right uptimekit-add-button" title="Add server mapping" aria-label="Add server mapping"><i class="fa fa-plus"></i></button>
+              <button type="button" id="add-mapping" class="btn btn-primary btn-sm pull-right uptimekit-add-button"><i class="fa fa-plus" aria-hidden="true"></i>Add mapping</button>
             </div>
             <p class="help-block">Map each Pterodactyl server to its UptimeKit monitors.</p>
             <div id="server-monitor-mappings" class="uptimekit-mapping-list">

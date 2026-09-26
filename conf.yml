@@ -1,7 +1,7 @@
 info:
-  name: "UptimeKit Maintenance"
+  name: "UptimeKit Integration"
   identifier: "uptimekitmaintenancetoggle"
-  description: "Manage UptimeKit maintenance windows from the Pterodactyl server console."
+  description: "Manage the UptimeKit integration from the Pterodactyl server console."
   flags: ""
   version: "0.1"
   target: "beta-2026-08"
