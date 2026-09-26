@@ -41,6 +41,8 @@ type UptimeResponse = {
 
 const API_BASE = '/api/client/extensions/uptimekitmaintenancetoggle';
 const emptyDraft: MaintenanceDraft = { title: '', description: '', startAt: '', endAt: '' };
+const uptimeResponseCache = new Map<string, UptimeResponse>();
+const statusPageUrlCache = new Map<string, string | undefined>();
 
 const getBrowserLocale = () =>
   typeof navigator === 'undefined' ? undefined : navigator.languages?.[0] || navigator.language || undefined;
@@ -216,6 +218,7 @@ const MaintenanceButton = () => {
   const [uptimeError, setUptimeError] = useState<string>();
   const [statusPageUrl, setStatusPageUrl] = useState<string>();
   const [uptimePercent, setUptimePercent] = useState<number>();
+  const placeholderUptimeBuckets = useMemo(() => Array.from({ length: 24 }, () => null), []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -249,21 +252,41 @@ const MaintenanceButton = () => {
 
   useEffect(() => {
     let mounted = true;
+    const cacheKey = `${serverId}:${uptimeRange}`;
+    const cached = uptimeResponseCache.get(cacheKey);
+    if (cached) {
+      setIsUptimeConfigured(cached.configured);
+      setUptimeBuckets(cached.buckets || []);
+      setStatusPageUrl(cached.statusPageUrl || statusPageUrlCache.get(serverId));
+      setUptimePercent(typeof cached.uptimePercent === 'number' ? cached.uptimePercent : undefined);
+      setUptimeError(undefined);
+      setIsUptimeLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
     setIsUptimeLoading(true);
     setUptimeError(undefined);
+    setUptimeBuckets([]);
+    setStatusPageUrl(statusPageUrlCache.get(serverId));
+    setUptimePercent(undefined);
     void request<UptimeResponse>(`/uptime?serverId=${encodeURIComponent(serverId)}&range=${uptimeRange}`)
       .then((remote) => {
         if (!mounted) return;
+        uptimeResponseCache.set(cacheKey, remote);
         setIsUptimeConfigured(remote.configured);
         setUptimeBuckets(remote.buckets || []);
-        setStatusPageUrl(remote.statusPageUrl || undefined);
+        const nextStatusPageUrl = remote.statusPageUrl || statusPageUrlCache.get(serverId);
+        if (remote.statusPageUrl) statusPageUrlCache.set(serverId, remote.statusPageUrl);
+        setStatusPageUrl(nextStatusPageUrl);
         setUptimePercent(typeof remote.uptimePercent === 'number' ? remote.uptimePercent : undefined);
       })
       .catch((requestError: unknown) => {
         if (!mounted) return;
         setIsUptimeConfigured(false);
         setUptimeBuckets([]);
-        setStatusPageUrl(undefined);
+        setStatusPageUrl(statusPageUrlCache.get(serverId));
         setUptimePercent(undefined);
         setUptimeError(requestError instanceof Error ? requestError.message : 'Could not load uptime history.');
       })
@@ -420,7 +443,7 @@ const MaintenanceButton = () => {
           <div className={`${consoleStyles.stat_block} w-full bg-gray-600`}>
             <div className={'min-w-0 w-full'}>
               <div className={'mb-2 flex items-center justify-between gap-3'}>
-                <p className={'text-sm font-semibold text-gray-50'}>Uptime history</p>
+                <p className={'text-sm font-semibold text-gray-50'}>Availability</p>
                 <div className={'flex rounded border border-neutral-600 p-0.5'} aria-label={'Uptime range'}>
                   {(['24h', '7d', '28d'] as UptimeRange[]).map((range) => (
                     <button
@@ -435,9 +458,7 @@ const MaintenanceButton = () => {
                   ))}
                 </div>
               </div>
-              {isUptimeLoading ? (
-                <p className={'text-xs text-neutral-300'}>Loading uptime history…</p>
-              ) : uptimeError ? (
+              {uptimeError ? (
                 <p className={'text-xs text-red-200'}>{uptimeError}</p>
               ) : (
                 <>
@@ -451,13 +472,15 @@ const MaintenanceButton = () => {
                       role={'list'}
                       aria-label={`Uptime history for the last ${uptimeRange}`}
                     >
-                      {uptimeBuckets.map((bucket) => {
-                        const presentation = uptimePresentation[bucket.status];
-                        const details = [formatUptimeRange(bucket.startAt, bucket.endAt), presentation.label, ...(bucket.titles || [])].join(': ');
+                      {(isUptimeLoading ? placeholderUptimeBuckets : uptimeBuckets).map((bucket, index) => {
+                        const presentation = bucket ? uptimePresentation[bucket.status] : undefined;
+                        const details = bucket
+                          ? [formatUptimeRange(bucket.startAt, bucket.endAt), presentation!.label, ...(bucket.titles || [])].join(': ')
+                          : 'Loading uptime history';
                         return (
                           <span
-                            key={`${bucket.startAt}-${bucket.endAt}`}
-                            className={`min-w-0 rounded-sm ${presentation.className}`}
+                            key={index}
+                            className={`min-w-0 rounded-sm transition-colors duration-200 ease-out ${presentation?.className || 'bg-gray-700'}`}
                             role={'listitem'}
                             title={details}
                             aria-label={details}
@@ -468,9 +491,9 @@ const MaintenanceButton = () => {
                   </div>
                   <div className={'mt-2 flex items-center justify-between'}>
                     <p className={'text-xs font-semibold text-neutral-200'}>
-                      {uptimePercent === undefined ? '—' : `${uptimePercent.toFixed(2)}%`} uptime
+                      {isUptimeLoading ? '000.00%' : uptimePercent === undefined ? '—' : `${uptimePercent.toFixed(2)}%`} uptime
                     </p>
-                    {statusPageUrl && (
+                    {!isUptimeLoading && statusPageUrl ? (
                       <a
                         className={'inline-flex h-7 w-7 items-center justify-center rounded text-neutral-300 hover:bg-neutral-700 hover:text-gray-50'}
                         href={statusPageUrl}
@@ -481,7 +504,7 @@ const MaintenanceButton = () => {
                       >
                         <ExternalLinkIcon />
                       </a>
-                    )}
+                    ) : <span className={'h-7 w-7'} aria-hidden />}
                   </div>
                 </>
               )}
@@ -563,7 +586,7 @@ const MaintenanceButton = () => {
             </div>
             <div className={'flex gap-2'}>
               <Button type={'submit'} disabled={isLoading}>{isLoading ? 'Saving…' : editingId ? 'Update' : 'Create'}</Button>
-              {editingId && <Button type={'button'} onClick={resetEditor}>Cancel</Button>}
+              {editingId && <Button.Danger type={'button'} onClick={resetEditor}>Cancel</Button.Danger>}
             </div>
           </form>
         </div>
@@ -576,9 +599,9 @@ const MaintenanceButton = () => {
         description={'This will permanently remove the selected maintenance window.'}
       >
         <div className={'mt-4 flex justify-end gap-2'}>
-          <Button.Text type={'button'} onClick={() => setPendingDeleteId(undefined)} disabled={isLoading}>
+          <Button.Danger type={'button'} onClick={() => setPendingDeleteId(undefined)} disabled={isLoading}>
             Cancel
-          </Button.Text>
+          </Button.Danger>
           <Button.Danger type={'button'} onClick={confirmDelete} disabled={isLoading}>
             {isLoading ? 'Deleting…' : 'Delete'}
           </Button.Danger>
