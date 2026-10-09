@@ -8,71 +8,55 @@
   </p>
 </div>
 
-## What it offers
+## Features
 
-This integration connects Pterodactyl servers to UptimeKit monitors and status pages. Panel users can manage maintenance for the server they are viewing, while administrators control which UptimeKit monitors belong to each server.
-- Create, edit, and delete maintenance windows from the server console.
-- Show scheduled, active, and completed windows with their title, description, and time range.
-- Display availability for the last 24 hours, 7 days, or 28 days.
-- Show an uptime percentage and a color-coded history of operational periods, degraded service, outages, and maintenance.
-- Open the matching public UptimeKit status page from the server view.
-- Associate one Pterodactyl server with one or more UptimeKit monitors.
-- Keep maintenance history scoped to the mapped monitors for each server.
+This integration connects Pterodactyl servers to UptimeKit monitors and status pages. Administrators map monitors to individual servers, while server members manage maintenance and view availability from the server console.
 
-## Maintenance windows in the server view
+**Maintenance windows.** Create, edit, delete, and review scheduled, active, and completed windows.
 
-Once a server is mapped to UptimeKit monitors, a Maintenance button appears in the server console. It opens a single view for the server's maintenance schedule.
+**Availability.** View uptime percentages and color-coded history for the last 24 hours, 7 days, or 28 days.
 
-Users can create a window with:
+**Status page.** Open the mapped public UptimeKit status page from the server view.
 
-- A title
-- An optional description
-- A start date and time
-- An end date and time
+**Monitor mappings.** Scope maintenance and incident history to the monitors assigned to each server.
 
-Maintenance data is scoped through Pterodactyl's authenticated server routes. Server members can view it, while creating, editing, or deleting windows requires the server's `control.stop` permission. A window can only be changed through a server when all of its associated monitors belong to that server's configured mapping.
-
-Active windows are clearly marked. Scheduled and completed windows remain available for review, with recent history kept visible in the panel for up to 30 days.
-
-Editing a window updates its time range in UptimeKit. Deleting a window removes it from the connected UptimeKit maintenance schedule after confirmation.
-
-## Controlled server stops
-
-Each server mapping has its own stop policy. When the policy is required, the panel disables the Stop and Kill controls until the server has an active maintenance window.
-
-This lets teams connect operational access to their maintenance process. Servers can still use a relaxed policy when stopping should remain available at any time.
-
-The stop policy is intentionally a panel UI workflow aid, not a server-side authorization boundary. It disables the visible Stop and Kill controls in the browser, but users or API clients that already have Pterodactyl's `control.stop` permission can still call the underlying power API directly. Use Pterodactyl permissions when stopping a server must be prevented as an access-control rule.
-
-## Availability at a glance
-
-The server view includes an availability panel for mapped monitors. Users can switch between three time ranges:
-
-- 24 hours
-- 7 days
-- 28 days
-
-The history bar separates normal operation, degraded service, partial outages, major outages, and maintenance. Hovering over a period shows its time range and related incident or maintenance title. The calculated uptime percentage excludes planned maintenance windows.
-
-When a public status page is available, an external link opens it in a new tab for a complete service overview.
+**Stop policy.** Optionally require an active maintenance window before the panel enables Stop and Kill.
 
 ## Panel setup
 
-An administrator configures the integration from the Pterodactyl extension settings page:
+Configure these values from the Pterodactyl extension settings page. Mapping fields can be repeated for each server.
 
-1. Enter the UptimeKit JSON API base URL. For the standard UptimeKit deployment this ends in /api/rpc; do not use the dashboard or public status-page URL.
-2. Enter the UptimeKit organization slug.
-3. Add an UptimeKit API key with permission to read and manage maintenance windows.
-4. Enter the UptimeKit status page API ID. This is separate from the organization slug and does not match the public status-page slug or URL.
-5. Add a mapping for each Pterodactyl server.
-6. Enter one or more UptimeKit monitor IDs for each server.
-7. Enter the public status-page URL to open from that server.
-8. Choose whether the server's Stop and Kill controls require an active maintenance window.
+| Configuration | Allowed values | Function | Important notes |
+| --- | --- | --- | --- |
+| API URL | HTTPS URL; standard deployments usually end in `/api/rpc` | UptimeKit JSON API base URL | Do not use the dashboard or public status-page URL. HTTP is allowed only when the insecure developer option is enabled. |
+| Organization slug | Non-empty string | Selects the UptimeKit organization | The organization owns the configured status page and monitors. |
+| API key | UptimeKit API key | Authenticates API requests | Must be able to read incidents, maintenance windows, and status pages, and create, update, and delete maintenance windows. |
+| Insecure HTTP | Enabled or disabled | Allows an HTTP API URL | Keep disabled in production; HTTP sends the API key without transport encryption. |
+| Status page API ID | Non-empty UptimeKit status page ID | Selects the status page used for maintenance and incident data | This is not the organization slug, public status-page slug, or public URL. |
+| Server UUID | Pterodactyl server UUID | Identifies the server receiving a mapping | Add one row per server mapping. |
+| Monitor IDs | One or more IDs separated by commas | Assigns UptimeKit monitors to the server | Maintenance and incident history is filtered through these IDs. |
+| Public status page URL | Optional HTTP or HTTPS URL | Provides the link opened from the server view | This is a public link, not the API status page ID. |
+| Stop policy | Required or relaxed | Controls whether the panel enables Stop and Kill only during active maintenance | This is a browser UI aid, not server-side authorization. |
 
-HTTPS is required for the UptimeKit API URL by default. A developer option can allow HTTP for local testing, but it sends the API key without transport encryption and must not be enabled for production endpoints.
+After entering the values, use **Test UptimeKit connection**, then save the configuration.
 
-After saving, the configured server views load their maintenance windows and availability directly from UptimeKit.
+## Using the integration
 
-## A focused workflow for operations teams
+After a server has a monitor mapping, a **Maintenance** button appears in its console view. Users can create a window with a title, optional description, start time, and end time. Times are entered in the browser's local timezone.
 
-The integration keeps the maintenance workflow close to the server controls that operators already use. Planned work can be scheduled before a change, the server can be protected while maintenance is active, and recent availability can be checked without leaving Pterodactyl.
+Server members can view maintenance windows. Creating, editing, or deleting them requires the server's `control.stop` permission. Maintenance data is filtered to the mapped monitors; an existing window can only be changed when all of its associated monitors belong to that server's mapping.
+
+Completed windows remain visible for up to 30 days. The availability panel provides 24-hour, 7-day, and 28-day views. Its history bar distinguishes operational periods, degraded service, partial outages, major outages, and maintenance. Uptime is calculated from incidents and maintenance windows, with planned maintenance excluded from the percentage.
+
+When a public status-page URL is configured, the availability panel includes a link to it.
+
+## Permissions and stop policy
+
+The stop policy disables the visible **Stop** and **Kill** controls until the server has an active maintenance window. It is a panel UI workflow aid, not a server-side authorization boundary: users or API clients that already have Pterodactyl's `control.stop` permission can still call the underlying power API directly. Use Pterodactyl permissions when stopping a server must be prevented as an access-control rule.
+
+## Troubleshooting
+
+- **The connection test returns HTML:** the configured URL is probably the UptimeKit dashboard. Use the JSON API base URL, usually ending in `/api/rpc`.
+- **The API returns 401 or 403:** check the API key and its permissions.
+- **The Maintenance button does not appear:** check that the server UUID and at least one monitor ID are mapped correctly.
+- **A server cannot see a window:** confirm that the window belongs to the configured status page and has at least one mapped monitor.
