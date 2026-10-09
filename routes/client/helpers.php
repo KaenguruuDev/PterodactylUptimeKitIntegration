@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\Response as HttpResponse;
 use Pterodactyl\BlueprintFramework\Libraries\ExtensionLibrary\Admin\BlueprintAdminLibrary;
 use Pterodactyl\Models\Server;
 
@@ -29,7 +28,7 @@ return [
         ];
     },
 
-    'upstreamError' => static function (HttpResponse $response, array $config, string $resource = 'request') {
+    'upstreamError' => static function ($response, array $config, string $resource = 'request') {
         $status = $response->status();
         $payload = $response->json();
         $detail = null;
@@ -45,6 +44,18 @@ return [
                 $candidateCode = (string) $payload['code'];
                 if (preg_match('/^[A-Za-z0-9._-]{1,100}$/', $candidateCode)) $code = $candidateCode;
             }
+        }
+        $body = trim((string) $response->body());
+        $contentType = (string) $response->header('Content-Type');
+        $isHtml = str_contains(strtolower($contentType), 'text/html')
+            || str_starts_with(strtolower(ltrim($body)), '<!doctype html')
+            || str_starts_with(strtolower(ltrim($body)), '<html');
+        if ($isHtml) {
+            $detail = 'The configured URL returned the UptimeKit web application instead of the JSON API. Set API URL to the API base, usually ending in /api/rpc, not the dashboard URL.'
+                . ($detail !== null ? ' UptimeKit reported: ' . $detail : '');
+        }
+        if ($body !== '' && $body !== $detail) {
+            $detail = $detail !== null ? $detail . ' Response body: ' . $body : $body;
         }
         if ($detail !== null) {
             $detail = str_replace((string) $config['apiKey'], '[redacted]', $detail);

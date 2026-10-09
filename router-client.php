@@ -6,7 +6,8 @@ use Pterodactyl\BlueprintFramework\Libraries\ExtensionLibrary\Admin\BlueprintAdm
 use Pterodactyl\Http\Middleware\Api\Client\Server\AuthenticateServerAccess;
 use Pterodactyl\Models\Server;
 
-$helpers = require __DIR__ . '/routes/client/helpers.php';
+$extensionApp = __DIR__ . '/../app';
+$helpers = require $extensionApp . '/client/helpers.php';
 $configuration = $helpers['configuration'];
 $upstreamError = $helpers['upstreamError'];
 $maintenanceForClient = $helpers['maintenanceForClient'];
@@ -14,7 +15,7 @@ $apiConfigurationError = $helpers['apiConfigurationError'];
 $connectionError = $helpers['connectionError'];
 $monitorIdsFrom = $helpers['monitorIdsFrom'];
 
-$forward = (require __DIR__ . '/routes/client/maintenance.php')(
+$forward = (require $extensionApp . '/client/maintenance.php')(
     $configuration,
     $upstreamError,
     $maintenanceForClient,
@@ -22,7 +23,7 @@ $forward = (require __DIR__ . '/routes/client/maintenance.php')(
     $connectionError,
     $monitorIdsFrom
 );
-$uptime = (require __DIR__ . '/routes/client/uptime.php')(
+$uptime = (require $extensionApp . '/client/uptime.php')(
     $configuration,
     $monitorIdsFrom,
     $upstreamError,

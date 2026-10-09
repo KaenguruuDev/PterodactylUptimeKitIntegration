@@ -47,16 +47,118 @@ return static function (
             return $upstreamError($response, $config, $incidentResponse->failed() ? 'incidents API endpoint' : 'maintenance API endpoint');
         }
 
+        if ($statusPageResponse && $statusPageResponse->failed()) {
+            return $upstreamError($statusPageResponse, $config, 'status page API endpoint');
+        }
+
         $incidentPayload = $incidentResponse->json();
         $maintenancePayload = $maintenanceResponse->json();
-        $statusPagePayload = $statusPageResponse && $statusPageResponse->successful() ? $statusPageResponse->json() : null;
+        $statusPagePayload = $statusPageResponse ? $statusPageResponse->json() : null;
+
+        $describePayload = static function (mixed $payload): string {
+            if ($payload === null) {
+                return 'The response body was empty or was not valid JSON.';
+            }
+            if (!is_array($payload)) {
+                return 'Expected a JSON object or array, received ' . get_debug_type($payload) . '.';
+            }
+            if ($payload === []) {
+                return 'Expected a non-empty JSON object or array, received an empty response.';
+            }
+
+            $keys = array_keys($payload);
+            $isList = $keys === range(0, count($keys) - 1);
+            if ($isList) {
+                return 'Expected a JSON object, received an array with ' . count($payload) . ' item(s).';
+            }
+
+            $fields = array_values(array_filter($keys, 'is_string'));
+            $fields = array_slice($fields, 0, 20);
+            $suffix = count($keys) > count($fields) ? ', …' : '';
+
+            return 'Received a JSON object with fields: ' . implode(', ', $fields) . $suffix . '.';
+        };
+        $payloadError = static function (mixed $payload): ?string {
+            if (!is_array($payload)) return null;
+            foreach (['message', 'error', 'title', 'detail'] as $field) {
+                if (isset($payload[$field]) && is_scalar($payload[$field])) {
+                    $detail = trim((string) $payload[$field]);
+                    if ($detail !== '') return $detail;
+                }
+            }
+
+            return null;
+        };
+        $responseBodyPreview = static function ($response) use ($config): ?string {
+            if (!is_object($response) || !method_exists($response, 'body')) return null;
+            $body = trim((string) $response->body());
+            if ($body === '') return null;
+            $body = str_replace((string) $config['apiKey'], '[redacted]', $body);
+            $body = preg_replace('/Bearer\s+[A-Za-z0-9._~+\/=\-]+/i', 'Bearer [redacted]', $body);
+
+            return mb_substr($body, 0, 1000) . (mb_strlen($body) > 1000 ? '…' : '');
+        };
+        $invalidPayload = static function (
+            string $resource,
+            mixed $payload,
+            $response = null,
+            ?string $reason = null
+        ) use ($describePayload, $payloadError, $responseBodyPreview, $config) {
+            $detail = $reason ?? $describePayload($payload);
+            if ($reportedError = $payloadError($payload)) {
+                $detail = "UptimeKit reported: {$reportedError} {$detail}";
+            }
+            if ($body = $responseBodyPreview($response)) {
+                $contentType = method_exists($response, 'header')
+                    ? (string) $response->header('Content-Type')
+                    : '';
+                $isHtml = str_contains(strtolower($contentType), 'text/html')
+                    || str_starts_with(strtolower(ltrim($body)), '<!doctype html')
+                    || str_starts_with(strtolower(ltrim($body)), '<html');
+                if ($isHtml) {
+                    $detail .= ' The configured URL returned the UptimeKit web application instead of the JSON API. Set API URL to the API base, usually ending in /api/rpc, not the dashboard URL.';
+                }
+                $detail .= ' Response body' . ($contentType !== '' ? ' (' . $contentType . ')' : '') . ': ' . $body;
+            }
+            $detail = str_replace((string) $config['apiKey'], '[redacted]', $detail);
+            $detail = preg_replace('/Bearer\s+[A-Za-z0-9._~+\/=\-]+/i', 'Bearer [redacted]', $detail);
+
+            return response()->json(array_filter([
+                'message' => "UptimeKit returned an invalid {$resource} response.",
+                'upstreamCategory' => 'invalid_payload',
+                'upstreamStatus' => $response?->status(),
+                'upstreamMessage' => mb_substr($detail, 0, 500),
+            ], static fn($value): bool => $value !== null && $value !== ''), 502);
+        };
+        $isList = static function (array $value): bool {
+            $expectedKey = 0;
+            foreach (array_keys($value) as $key) {
+                if ($key !== $expectedKey++) return false;
+            }
+
+            return true;
+        };
+        $extractList = static function (mixed $payload, string $container) use ($isList): ?array {
+            if (is_array($payload) && array_key_exists($container, $payload)) {
+                $payload = $payload[$container];
+            }
+            if (!is_array($payload) || !$isList($payload)) return null;
+            foreach ($payload as $item) {
+                if (!is_array($item)) return null;
+            }
+
+            return $payload;
+        };
         $statusPage = is_array($statusPagePayload) && isset($statusPagePayload['data'])
             ? $statusPagePayload['data']
             : $statusPagePayload;
-        $incidents = is_array($incidentPayload) && isset($incidentPayload['items']) ? $incidentPayload['items'] : $incidentPayload;
-        $maintenances = is_array($maintenancePayload) && isset($maintenancePayload['data']) ? $maintenancePayload['data'] : $maintenancePayload;
-        $incidents = is_array($incidents) ? $incidents : [];
-        $maintenances = is_array($maintenances) ? $maintenances : [];
+        if ($statusPageResponse && (!is_array($statusPage) || $statusPage === [])) {
+            return $invalidPayload('status page', $statusPagePayload, $statusPageResponse);
+        }
+        $incidents = $extractList($incidentPayload, 'items');
+        if ($incidents === null) return $invalidPayload('incidents', $incidentPayload, $incidentResponse);
+        $maintenances = $extractList($maintenancePayload, 'data');
+        if ($maintenances === null) return $invalidPayload('maintenance', $maintenancePayload, $maintenanceResponse);
         $statusPageUrl = null;
         if (is_array($statusPage)) {
             $candidateUrl = $statusPage['url'] ?? $statusPage['publicUrl'] ?? null;
@@ -83,6 +185,51 @@ return static function (
         $incidents = array_values(array_filter($incidents, static fn($item): bool => is_array($item) && $overlapsMappedMonitor($item)));
         $maintenances = array_values(array_filter($maintenances, static fn($item): bool => is_array($item) && $overlapsMappedMonitor($item)));
 
+        $validateDateFields = static function (array $item, array $startFields, array $endFields, string $resource) use ($invalidPayload) {
+            $start = null;
+            foreach ($startFields as $field) {
+                if (array_key_exists($field, $item) && $item[$field] !== null && $item[$field] !== '') {
+                    $start = $item[$field];
+                    break;
+                }
+            }
+            $end = null;
+            foreach ($endFields as $field) {
+                if (array_key_exists($field, $item) && $item[$field] !== null && $item[$field] !== '') {
+                    $end = $item[$field];
+                    break;
+                }
+            }
+            if (!is_string($start) || $start === '' || strtotime($start) === false) {
+                return $invalidPayload(
+                    $resource,
+                    $item,
+                    $resource === 'incidents' ? $incidentResponse : $maintenanceResponse,
+                    'An item is missing a valid start date. Expected one of: ' . implode(', ', $startFields) . '.'
+                );
+            }
+            if ($end !== null && (!is_string($end) || ($end !== '' && strtotime($end) === false))) {
+                return $invalidPayload(
+                    $resource,
+                    $item,
+                    $resource === 'incidents' ? $incidentResponse : $maintenanceResponse,
+                    'An item contains an invalid end date. Expected one of: ' . implode(', ', $endFields) . '.'
+                );
+            }
+
+            return null;
+        };
+        foreach ($incidents as $item) {
+            if ($validationError = $validateDateFields($item, ['startedAt', 'startAt'], ['endedAt', 'endAt'], 'incidents')) {
+                return $validationError;
+            }
+        }
+        foreach ($maintenances as $item) {
+            if ($validationError = $validateDateFields($item, ['startAt', 'startedAt'], ['endAt', 'endedAt'], 'maintenance')) {
+                return $validationError;
+            }
+        }
+
         $now = time();
         $bucketCount = 24;
         $bucketSeconds = intdiv($rangeSeconds[$range], $bucketCount);
@@ -96,8 +243,10 @@ return static function (
         $severityRank = ['operational' => 0, 'degraded' => 1, 'partial_outage' => 2, 'major_outage' => 3];
         $boundaries = [$rangeStart, $now];
         foreach (array_merge($incidents, $maintenances) as $item) {
-            $startAt = !empty($item['startedAt']) ? strtotime($item['startedAt']) : strtotime($item['startAt'] ?? '');
-            $endAt = !empty($item['endedAt']) ? strtotime($item['endedAt']) : strtotime($item['endAt'] ?? '');
+            $startValue = $item['startedAt'] ?? $item['startAt'] ?? '';
+            $endValue = $item['endedAt'] ?? $item['endAt'] ?? '';
+            $startAt = strtotime($startValue);
+            $endAt = strtotime($endValue);
             if ($startAt === false) continue;
             $endAt = $endAt === false ? $now : $endAt;
             if ($startAt >= $now || $endAt <= $rangeStart) continue;
@@ -122,7 +271,7 @@ return static function (
             if ($underMaintenance) continue;
             $monitoredSeconds += $end - $start;
             foreach ($incidents as $item) {
-                if ($overlaps($item['startedAt'] ?? null, $item['endedAt'] ?? null, $start, $end)) {
+                if ($overlaps($item['startedAt'] ?? $item['startAt'] ?? null, $item['endedAt'] ?? $item['endAt'] ?? null, $start, $end)) {
                     $downtimeSeconds += $end - $start;
                     break;
                 }
@@ -164,5 +313,5 @@ return static function (
             'uptimePercent' => $uptimePercent,
             'buckets' => $buckets,
         ]);
-};
+    };
 };

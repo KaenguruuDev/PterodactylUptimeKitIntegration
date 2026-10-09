@@ -27,7 +27,7 @@ data:
 
 requests:
   views: ""
-  app: ""
+  app: "routes"
   routers:
     application: ""
     client: "router-client.php"

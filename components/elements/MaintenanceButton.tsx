@@ -10,9 +10,10 @@ import {
   MaintenanceWindow,
   UptimeBucket,
   UptimeRange,
-  UptimeResponse,
 } from "./maintenance/types";
 import {
+  UPTIME_CACHE_TTL_MS,
+  parseUptimeResponse,
   request,
   statusPageUrlCache,
   uptimeResponseCache,
@@ -133,15 +134,15 @@ const MaintenanceButton = () => {
     let mounted = true;
     const cacheKey = `${serverId}:${uptimeRange}`;
     const cached = uptimeResponseCache.get(cacheKey);
-    if (cached) {
-      setIsUptimeConfigured(cached.configured);
-      setUptimeBuckets(cached.buckets || []);
+    if (cached && Date.now() - cached.fetchedAt < UPTIME_CACHE_TTL_MS) {
+      setIsUptimeConfigured(cached.response.configured);
+      setUptimeBuckets(cached.response.buckets || []);
       setStatusPageUrl(
-        cached.statusPageUrl || statusPageUrlCache.get(serverId),
+        cached.response.statusPageUrl || statusPageUrlCache.get(serverId),
       );
       setUptimePercent(
-        typeof cached.uptimePercent === "number"
-          ? cached.uptimePercent
+        typeof cached.response.uptimePercent === "number"
+          ? cached.response.uptimePercent
           : undefined,
       );
       setUptimeError(undefined);
@@ -150,16 +151,21 @@ const MaintenanceButton = () => {
         mounted = false;
       };
     }
+    uptimeResponseCache.delete(cacheKey);
 
     setIsUptimeLoading(true);
     setUptimeError(undefined);
     setUptimeBuckets([]);
     setStatusPageUrl(statusPageUrlCache.get(serverId));
     setUptimePercent(undefined);
-    void request<UptimeResponse>(`${serverApiPath}/uptime?range=${uptimeRange}`)
-      .then((remote) => {
+    void request<unknown>(`${serverApiPath}/uptime?range=${uptimeRange}`)
+      .then((payload) => {
+        const remote = parseUptimeResponse(payload);
         if (!mounted) return;
-        uptimeResponseCache.set(cacheKey, remote);
+        uptimeResponseCache.set(cacheKey, {
+          response: remote,
+          fetchedAt: Date.now(),
+        });
         setIsUptimeConfigured(remote.configured);
         setUptimeBuckets(remote.buckets || []);
         const nextStatusPageUrl =
@@ -175,6 +181,7 @@ const MaintenanceButton = () => {
       })
       .catch((requestError: unknown) => {
         if (!mounted) return;
+        uptimeResponseCache.delete(cacheKey);
         setIsUptimeConfigured(false);
         setUptimeBuckets([]);
         setStatusPageUrl(statusPageUrlCache.get(serverId));
