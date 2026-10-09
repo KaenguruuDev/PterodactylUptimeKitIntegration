@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/elements/button';
 import { Dialog } from '@/components/elements/dialog';
 import Icon from '@/components/elements/Icon';
@@ -221,6 +221,35 @@ const MaintenanceButton = () => {
   const [uptimePercent, setUptimePercent] = useState<number>();
   const placeholderUptimeBuckets = useMemo(() => Array.from({ length: 24 }, () => null), []);
   const serverApiPath = `/servers/${encodeURIComponent(serverId)}`;
+  const layoutRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const layout = layoutRef.current;
+    if (!layout || typeof ResizeObserver === 'undefined') return;
+
+    let frame: number | undefined;
+    let timeout: number | undefined;
+    const refitConsole = () => {
+      window.dispatchEvent(new Event('resize'));
+      frame = window.requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+      timeout = window.setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
+    };
+    const observer = new ResizeObserver(refitConsole);
+    observer.observe(layout);
+
+    // The terminal and this component live in separate grid columns. Observe
+    // their shared row as well because that is the element whose height grows
+    // when the availability panel is inserted.
+    const row = layout.parentElement?.parentElement;
+    if (row) observer.observe(row);
+    refitConsole();
+
+    return () => {
+      observer.disconnect();
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      if (timeout !== undefined) window.clearTimeout(timeout);
+    };
+  }, [isConfigured]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -421,7 +450,7 @@ const MaintenanceButton = () => {
   };
 
   return (
-    <div className={'col-span-6 min-w-0 w-full'}>
+    <div ref={layoutRef} className={'col-span-6 min-w-0 w-full'}>
       <Button.Text
         className={'flex h-10 w-full items-center justify-center'}
         type={'button'}
