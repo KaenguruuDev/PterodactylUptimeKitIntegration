@@ -328,7 +328,20 @@ const MaintenanceButton = () => {
             body: JSON.stringify(next),
           },
         );
-        setWindows((current) => [...current, saved]);
+        setWindows((current) => [
+          ...current,
+          {
+            ...next,
+            ...saved,
+            id: saved.id || next.id,
+            title: saved.title || next.title,
+            description: saved.description ?? next.description,
+            startAt: saved.startAt || next.startAt,
+            endAt: saved.endAt || next.endAt,
+            status: saved.status || next.status,
+            monitorIds: saved.monitorIds ?? next.monitorIds,
+          },
+        ]);
       }
       resetEditor();
     } catch (requestError: unknown) {

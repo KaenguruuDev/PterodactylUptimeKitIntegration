@@ -90,9 +90,19 @@ return [
 
     'maintenanceForClient' => static function (array $item): array {
         $result = [];
-        foreach (['id', 'title', 'description', 'startAt', 'endAt', 'status'] as $field) {
-            if (array_key_exists($field, $item) && (is_scalar($item[$field]) || $item[$field] === null)) {
-                $result[$field] = $item[$field] === null ? null : (string) $item[$field];
+        $fields = [
+            'id' => ['id'],
+            'title' => ['title'],
+            'description' => ['description'],
+            'startAt' => ['startAt', 'startedAt'],
+            'endAt' => ['endAt', 'plannedEndAt', 'endedAt'],
+            'status' => ['status'],
+        ];
+        foreach ($fields as $target => $sources) {
+            foreach ($sources as $source) {
+                if (!array_key_exists($source, $item) || !(is_scalar($item[$source]) || $item[$source] === null)) continue;
+                $result[$target] = $item[$source] === null ? null : (string) $item[$source];
+                break;
             }
         }
         if (isset($item['monitorIds']) && is_array($item['monitorIds'])) {

@@ -99,14 +99,54 @@ return static function (
         if ($method === 'DELETE') return response()->json(['deleted' => (string) $id], $response->status());
         if ($method !== 'GET') {
             $item = is_array($payload) && isset($payload['data']) ? $payload['data'] : $payload;
+            if ($method === 'POST' && is_array($item)) {
+                // The create endpoint returns only {id}. Fill the client
+                // response with the validated request data so the newly
+                // created window can be rendered immediately.
+                $item = array_merge([
+                    'title' => (string) $request->input('title'),
+                    'description' => (string) ($request->input('description') ?? ''),
+                    'startAt' => (string) $request->input('startAt'),
+                    'endAt' => (string) $request->input('endAt'),
+                    'status' => 'scheduled',
+                    'monitorIds' => $config['monitorIds'],
+                ], $item);
+            }
             return response()->json(is_array($item) ? $maintenanceForClient($item) : [], $response->status());
         }
 
         $items = is_array($payload) && isset($payload['data']) ? $payload['data'] : $payload;
         $items = is_array($items) ? $items : [];
-        $items = array_values(array_filter($items, static function ($item) use ($config, $monitorIdsFrom): bool {
-            if (!is_array($item)) return false;
-            return count(array_intersect(array_map('strval', $config['monitorIds']), array_map('strval', $monitorIdsFrom($item)))) > 0;
+
+        // UptimeKit's list response does not include the incident-monitor
+        // relationships, while the detail response does. Hydrate each item
+        // before applying the server monitor scope so valid windows are not
+        // discarded as unrelated.
+        $hydratedItems = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) continue;
+            $monitorIds = $monitorIdsFrom($item);
+            $itemId = $item['id'] ?? null;
+            if (count($monitorIds) === 0 && is_scalar($itemId) && (string) $itemId !== '') {
+                try {
+                    $detailResponse = $client->get($config['apiUrl'] . '/maintenance/' . rawurlencode((string) $itemId));
+                } catch (ConnectionException $exception) {
+                    return $connectionError($exception, $config);
+                }
+                if ($detailResponse->failed()) {
+                    return $upstreamError($detailResponse, $config, 'maintenance window');
+                }
+                $detail = $detailResponse->json();
+                $detail = is_array($detail) && isset($detail['data']) ? $detail['data'] : $detail;
+                if (is_array($detail)) $item = array_merge($item, $detail);
+            }
+
+            $hydratedItems[] = $item;
+        }
+
+        $mappedMonitorIds = array_map('strval', $config['monitorIds']);
+        $items = array_values(array_filter($hydratedItems, static function (array $item) use ($mappedMonitorIds, $monitorIdsFrom): bool {
+            return count(array_intersect($mappedMonitorIds, array_map('strval', $monitorIdsFrom($item)))) > 0;
         }));
 
         $windows = array_map($maintenanceForClient, $items);
