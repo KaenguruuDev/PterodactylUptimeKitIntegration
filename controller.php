@@ -1,6 +1,6 @@
 <?php
 
-namespace Pterodactyl\Http\Controllers\Admin\Extensions\uptimekitmaintenancetoggle;
+namespace Pterodactyl\Http\Controllers\Admin\Extensions\Uptimekit;
 
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\RedirectResponse;
@@ -11,7 +11,7 @@ use Pterodactyl\BlueprintFramework\Libraries\ExtensionLibrary\Admin\BlueprintAdm
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Http\Requests\Admin\AdminFormRequest;
 
-class UptimekitmaintenancetoggleExtensionController extends Controller
+class UptimekitExtensionController extends Controller
 {
     public function __construct(
         private ViewFactory $view,
@@ -21,32 +21,32 @@ class UptimekitmaintenancetoggleExtensionController extends Controller
     public function index(): View
     {
         return $this->view->make(
-            'admin.extensions.uptimekitmaintenancetoggle.index',
+            'admin.extensions.uptimekit.index',
             [
-                'root' => '/admin/extensions/uptimekitmaintenancetoggle',
+                'root' => '/admin/extensions/uptimekit',
                 'blueprint' => $this->blueprint,
-                'apiUrl' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'apiUrl') ?? '',
-                'organizationSlug' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'organizationSlug') ?? '',
-                'apiKeyConfigured' => (string) ($this->blueprint->dbGet('uptimekitmaintenancetoggle', 'apiKey') ?? '') !== '',
-                'allowInsecureApiUrl' => (bool) ($this->blueprint->dbGet('uptimekitmaintenancetoggle', 'allowInsecureApiUrl') ?? false),
-                'statusPageId' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'statusPageId') ?? '',
-                'serverMonitorMappings' => $this->blueprint->dbGet('uptimekitmaintenancetoggle', 'serverMonitorMappings') ?? '{}',
+                'apiUrl' => $this->blueprint->dbGet('uptimekit', 'apiUrl') ?? '',
+                'organizationSlug' => $this->blueprint->dbGet('uptimekit', 'organizationSlug') ?? '',
+                'apiKeyConfigured' => (string) ($this->blueprint->dbGet('uptimekit', 'apiKey') ?? '') !== '',
+                'allowInsecureApiUrl' => (bool) ($this->blueprint->dbGet('uptimekit', 'allowInsecureApiUrl') ?? false),
+                'statusPageId' => $this->blueprint->dbGet('uptimekit', 'statusPageId') ?? '',
+                'serverMonitorMappings' => $this->blueprint->dbGet('uptimekit', 'serverMonitorMappings') ?? '{}',
             ]
         );
     }
 
-    public function update(UptimekitmaintenancetoggleSettingsFormRequest $request): RedirectResponse
+    public function update(UptimekitSettingsFormRequest $request): RedirectResponse
     {
         foreach ($request->only(['apiUrl', 'organizationSlug', 'statusPageId']) as $key => $value) {
-            $this->blueprint->dbSet('uptimekitmaintenancetoggle', $key, $value);
+            $this->blueprint->dbSet('uptimekit', $key, $value);
         }
         $this->blueprint->dbSet(
-            'uptimekitmaintenancetoggle',
+            'uptimekit',
             'allowInsecureApiUrl',
             $request->boolean('allowInsecureApiUrl') ? '1' : '0'
         );
         if ($request->filled('apiKey')) {
-            $this->blueprint->dbSet('uptimekitmaintenancetoggle', 'apiKey', $request->input('apiKey'));
+            $this->blueprint->dbSet('uptimekit', 'apiKey', $request->input('apiKey'));
         }
 
         $mapping = [];
@@ -63,13 +63,13 @@ class UptimekitmaintenancetoggleExtensionController extends Controller
                 ];
             }
         }
-        $this->blueprint->dbSet('uptimekitmaintenancetoggle', 'serverMonitorMappings', json_encode($mapping));
+        $this->blueprint->dbSet('uptimekit', 'serverMonitorMappings', json_encode($mapping));
 
-        return redirect()->route('admin.extensions.uptimekitmaintenancetoggle.index');
+        return redirect()->route('admin.extensions.uptimekit.index');
     }
 }
 
-class UptimekitmaintenancetoggleSettingsFormRequest extends AdminFormRequest
+class UptimekitSettingsFormRequest extends AdminFormRequest
 {
     protected function failedValidation(Validator $validator): void
     {
@@ -96,8 +96,8 @@ class UptimekitmaintenancetoggleSettingsFormRequest extends AdminFormRequest
             ],
             'organizationSlug' => ['required', 'string', 'max:255'],
             'apiKey' => [
-                Rule::requiredIf(fn (): bool => (string) (
-                    app(BlueprintExtensionLibrary::class)->dbGet('uptimekitmaintenancetoggle', 'apiKey') ?? ''
+                Rule::requiredIf(fn(): bool => (string) (
+                    app(BlueprintExtensionLibrary::class)->dbGet('uptimekit', 'apiKey') ?? ''
                 ) === ''),
                 'nullable',
                 'string',

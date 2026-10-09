@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/uptimekit-maintenance-logo.svg" alt="UptimeKit logo" width="120" height="120">
+  <img src="assets/uptimekit.svg" alt="UptimeKit logo" width="120" height="120">
 
   <h1>UptimeKit Integration for Pterodactyl</h1>
 

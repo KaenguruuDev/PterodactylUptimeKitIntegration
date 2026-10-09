@@ -13,7 +13,7 @@ use Pterodactyl\Models\Server;
 $configuration = static function (BlueprintAdminLibrary $blueprint, Server $server): array {
     $serverId = (string) $server->uuid;
     $mappings = json_decode(
-        (string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'serverMonitorMappings') ?? '{}'),
+        (string) ($blueprint->dbGet('uptimekit', 'serverMonitorMappings') ?? '{}'),
         true
     );
     $mapping = is_array($mappings) ? ($mappings[$serverId] ?? []) : [];
@@ -25,11 +25,11 @@ $configuration = static function (BlueprintAdminLibrary $blueprint, Server $serv
         'serverId' => $serverId,
         'monitorIds' => array_values(array_filter($monitorIds)),
         'enforceStop' => $isStructuredMapping ? (bool) ($mapping['enforceStop'] ?? true) : true,
-        'statusPageId' => (string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'statusPageId') ?? ''),
-        'apiUrl' => rtrim((string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'apiUrl') ?? ''), '/'),
-        'allowInsecureApiUrl' => (bool) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'allowInsecureApiUrl') ?? false),
-        'organizationSlug' => (string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'organizationSlug') ?? ''),
-        'apiKey' => (string) ($blueprint->dbGet('uptimekitmaintenancetoggle', 'apiKey') ?? ''),
+        'statusPageId' => (string) ($blueprint->dbGet('uptimekit', 'statusPageId') ?? ''),
+        'apiUrl' => rtrim((string) ($blueprint->dbGet('uptimekit', 'apiUrl') ?? ''), '/'),
+        'allowInsecureApiUrl' => (bool) ($blueprint->dbGet('uptimekit', 'allowInsecureApiUrl') ?? false),
+        'organizationSlug' => (string) ($blueprint->dbGet('uptimekit', 'organizationSlug') ?? ''),
+        'apiKey' => (string) ($blueprint->dbGet('uptimekit', 'apiKey') ?? ''),
     ];
 };
 
@@ -72,7 +72,7 @@ $upstreamError = static function (HttpResponse $response, array $config, string 
         'upstreamStatus' => $status,
         'upstreamCode' => $code,
         'upstreamMessage' => $detail,
-    ], static fn ($value): bool => $value !== null && $value !== ''), $status >= 500 ? 502 : $status);
+    ], static fn($value): bool => $value !== null && $value !== ''), $status >= 500 ? 502 : $status);
 };
 
 $maintenanceForClient = static function (array $item): array {
@@ -166,11 +166,11 @@ $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, 
     $client = Http::withToken($config['apiKey'])
         ->acceptJson()
         ->withHeaders(['X-Organization-Slug' => $config['organizationSlug']]);
-    $path = '/maintenance'.($id ? '/'.rawurlencode($id) : '');
+    $path = '/maintenance' . ($id ? '/' . rawurlencode($id) : '');
 
     if ($id !== null) {
         try {
-            $lookup = $client->get($config['apiUrl'].$path);
+            $lookup = $client->get($config['apiUrl'] . $path);
         } catch (ConnectionException $exception) {
             return $connectionError($exception, $config);
         }
@@ -193,7 +193,7 @@ $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, 
 
     try {
         if ($method === 'GET') {
-            $response = $client->get($config['apiUrl'].$path, [
+            $response = $client->get($config['apiUrl'] . $path, [
                 'statusPageId' => $config['statusPageId'],
             ]);
         } elseif ($method === 'POST') {
@@ -203,7 +203,7 @@ $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, 
                 'startAt' => ['required', 'date'],
                 'endAt' => ['required', 'date', 'after:startAt'],
             ]);
-            $response = $client->post($config['apiUrl'].$path, [
+            $response = $client->post($config['apiUrl'] . $path, [
                 'title' => $body['title'],
                 'description' => $body['description'] ?? '',
                 'status' => 'scheduled',
@@ -217,12 +217,12 @@ $forward = static function (BlueprintAdminLibrary $blueprint, Request $request, 
                 'startAt' => ['required', 'date'],
                 'endAt' => ['required', 'date', 'after:startAt'],
             ]);
-            $response = $client->patch($config['apiUrl'].$path, [
+            $response = $client->patch($config['apiUrl'] . $path, [
                 'startAt' => $body['startAt'],
                 'endAt' => $body['endAt'],
             ]);
         } else {
-            $response = $client->delete($config['apiUrl'].$path);
+            $response = $client->delete($config['apiUrl'] . $path);
         }
     } catch (ConnectionException $exception) {
         return $connectionError($exception, $config);
@@ -273,12 +273,12 @@ $uptime = static function (BlueprintAdminLibrary $blueprint, Request $request, S
     $incidentQuery = ['status' => 'all', 'limit' => 1000];
     if ($config['statusPageId'] !== '') $incidentQuery['statusPageId'] = $config['statusPageId'];
     try {
-        $incidentResponse = $client->get($config['apiUrl'].'/incidents', $incidentQuery);
-        $maintenanceResponse = $client->get($config['apiUrl'].'/maintenance', [
+        $incidentResponse = $client->get($config['apiUrl'] . '/incidents', $incidentQuery);
+        $maintenanceResponse = $client->get($config['apiUrl'] . '/maintenance', [
             'statusPageId' => $config['statusPageId'],
         ]);
         $statusPageResponse = $config['statusPageId'] !== ''
-            ? $client->get($config['apiUrl'].'/status-pages/'.rawurlencode($config['statusPageId']))
+            ? $client->get($config['apiUrl'] . '/status-pages/' . rawurlencode($config['statusPageId']))
             : null;
     } catch (ConnectionException $exception) {
         return $connectionError($exception, $config);
@@ -307,13 +307,13 @@ $uptime = static function (BlueprintAdminLibrary $blueprint, Request $request, S
         } elseif (!empty($statusPage['domain']) && is_string($statusPage['domain'])) {
             $statusPageUrl = preg_match('#^https?://#i', $statusPage['domain'])
                 ? rtrim($statusPage['domain'], '/')
-                : 'https://'.rtrim($statusPage['domain'], '/');
+                : 'https://' . rtrim($statusPage['domain'], '/');
         } elseif (!empty($statusPage['slug']) && is_string($statusPage['slug'])) {
             $apiParts = parse_url($config['apiUrl']);
             if (!empty($apiParts['scheme']) && !empty($apiParts['host'])) {
-                $statusPageUrl = $apiParts['scheme'].'://'.$apiParts['host']
-                    .(!empty($apiParts['port']) ? ':'.$apiParts['port'] : '')
-                    .'/'.rawurlencode($statusPage['slug']);
+                $statusPageUrl = $apiParts['scheme'] . '://' . $apiParts['host']
+                    . (!empty($apiParts['port']) ? ':' . $apiParts['port'] : '')
+                    . '/' . rawurlencode($statusPage['slug']);
             }
         }
     }
@@ -322,8 +322,8 @@ $uptime = static function (BlueprintAdminLibrary $blueprint, Request $request, S
         foreach ($monitorIdsFrom($item) as $id) if (isset($mappedIds[$id])) return true;
         return false;
     };
-    $incidents = array_values(array_filter($incidents, static fn ($item): bool => is_array($item) && $overlapsMappedMonitor($item)));
-    $maintenances = array_values(array_filter($maintenances, static fn ($item): bool => is_array($item) && $overlapsMappedMonitor($item)));
+    $incidents = array_values(array_filter($incidents, static fn($item): bool => is_array($item) && $overlapsMappedMonitor($item)));
+    $maintenances = array_values(array_filter($maintenances, static fn($item): bool => is_array($item) && $overlapsMappedMonitor($item)));
 
     $now = time();
     $bucketCount = 24;
@@ -409,9 +409,9 @@ $uptime = static function (BlueprintAdminLibrary $blueprint, Request $request, S
 };
 
 Route::prefix('/servers/{server}')->middleware(AuthenticateServerAccess::class)->group(function () use ($forward, $uptime): void {
-    Route::get('/maintenance', fn (BlueprintAdminLibrary $blueprint, Request $request, Server $server) => $forward($blueprint, $request, $server, 'GET'));
-    Route::post('/maintenance', fn (BlueprintAdminLibrary $blueprint, Request $request, Server $server) => $forward($blueprint, $request, $server, 'POST'));
-    Route::patch('/maintenance/{id}', fn (BlueprintAdminLibrary $blueprint, Request $request, Server $server, string $id) => $forward($blueprint, $request, $server, 'PATCH', $id));
-    Route::delete('/maintenance/{id}', fn (BlueprintAdminLibrary $blueprint, Request $request, Server $server, string $id) => $forward($blueprint, $request, $server, 'DELETE', $id));
-    Route::get('/uptime', fn (BlueprintAdminLibrary $blueprint, Request $request, Server $server) => $uptime($blueprint, $request, $server));
+    Route::get('/maintenance', fn(BlueprintAdminLibrary $blueprint, Request $request, Server $server) => $forward($blueprint, $request, $server, 'GET'));
+    Route::post('/maintenance', fn(BlueprintAdminLibrary $blueprint, Request $request, Server $server) => $forward($blueprint, $request, $server, 'POST'));
+    Route::patch('/maintenance/{id}', fn(BlueprintAdminLibrary $blueprint, Request $request, Server $server, string $id) => $forward($blueprint, $request, $server, 'PATCH', $id));
+    Route::delete('/maintenance/{id}', fn(BlueprintAdminLibrary $blueprint, Request $request, Server $server, string $id) => $forward($blueprint, $request, $server, 'DELETE', $id));
+    Route::get('/uptime', fn(BlueprintAdminLibrary $blueprint, Request $request, Server $server) => $uptime($blueprint, $request, $server));
 });

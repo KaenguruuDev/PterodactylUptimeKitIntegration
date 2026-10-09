@@ -1,12 +1,12 @@
 info:
   name: "UptimeKit Integration"
-  identifier: "uptimekitmaintenancetoggle"
+  identifier: "uptimekit"
   description: "Show uptime statistics and manage maintenance windows for individual servers."
   flags: ""
   version: "0.1"
   target: "beta-2026-08"
   author: "KaenguruuDev"
-  icon: "assets/uptimekit-maintenance-logo.svg"
+  icon: "assets/uptimekit.svg"
   website: ""
 
 admin:
