@@ -3,7 +3,10 @@
 namespace Pterodactyl\Http\Controllers\Admin\Extensions\Uptimekit;
 
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 use Illuminate\View\Factory as ViewFactory;
 use Illuminate\View\View;
@@ -66,6 +69,77 @@ class UptimekitExtensionController extends Controller
         $this->blueprint->dbSet('uptimekit', 'serverMonitorMappings', json_encode($mapping));
 
         return redirect()->route('admin.extensions.uptimekit.index');
+    }
+
+    public function post(Request $request): RedirectResponse
+    {
+        $config = [
+            'apiUrl' => rtrim(trim((string) ($request->input('apiUrl') ?: $this->blueprint->dbGet('uptimekit', 'apiUrl'))), '/'),
+            'organizationSlug' => trim((string) ($request->input('organizationSlug') ?: $this->blueprint->dbGet('uptimekit', 'organizationSlug'))),
+            'apiKey' => (string) ($request->input('apiKey') ?: $this->blueprint->dbGet('uptimekit', 'apiKey')),
+            'statusPageId' => trim((string) ($request->input('statusPageId') ?: $this->blueprint->dbGet('uptimekit', 'statusPageId'))),
+            'allowInsecureApiUrl' => $request->boolean('allowInsecureApiUrl'),
+        ];
+        $failure = static function (string $message): RedirectResponse {
+            return redirect()->route('admin.extensions.uptimekit.index')->with('uptimekitTest', [
+                'ok' => false,
+                'message' => $message,
+            ]);
+        };
+
+        if ($config['apiUrl'] === '' || $config['organizationSlug'] === '' || $config['apiKey'] === '' || $config['statusPageId'] === '') {
+            return $failure('Enter the API URL, organization slug, API key, and status page ID before testing.');
+        }
+        $scheme = strtolower((string) parse_url($config['apiUrl'], PHP_URL_SCHEME));
+        if ($scheme !== 'https' && !($config['allowInsecureApiUrl'] && $scheme === 'http')) {
+            return $failure('The API URL must use HTTPS unless insecure HTTP is enabled.');
+        }
+        $responseDetail = static function ($response) use ($config): string {
+            $contentType = method_exists($response, 'header')
+                ? (string) $response->header('Content-Type')
+                : '';
+            $body = trim((string) $response->body());
+            $body = str_replace($config['apiKey'], '[redacted]', $body);
+            $body = preg_replace('/Bearer\s+[A-Za-z0-9._~+\/=\-]+/i', 'Bearer [redacted]', $body);
+            $isHtml = str_contains(strtolower($contentType), 'text/html')
+                || str_starts_with(strtolower(ltrim($body)), '<!doctype html')
+                || str_starts_with(strtolower(ltrim($body)), '<html');
+            $body = $body === '' ? '<empty>' : mb_substr($body, 0, 1000) . (mb_strlen($body) > 1000 ? '…' : '');
+
+            return ($isHtml
+                ? ' The configured URL returned the UptimeKit web application instead of the JSON API. Set API URL to the API base, usually ending in /api/rpc, not the dashboard URL.'
+                : '') . ' Content-Type: ' . ($contentType !== '' ? $contentType : '<missing>') . '. Response body: ' . $body;
+        };
+
+        try {
+            $response = Http::withToken($config['apiKey'])
+                ->acceptJson()
+                ->withHeaders(['X-Organization-Slug' => $config['organizationSlug']])
+                ->get($config['apiUrl'] . '/status-pages/' . rawurlencode($config['statusPageId']));
+        } catch (ConnectionException $exception) {
+            return $failure('Could not connect to UptimeKit: ' . $exception->getMessage());
+        }
+
+        $payload = $response->json();
+        if ($response->failed()) {
+            $detail = is_array($payload) ? ($payload['message'] ?? $payload['error'] ?? null) : null;
+            $message = 'UptimeKit returned HTTP ' . $response->status() . '.';
+            if (is_scalar($detail) && trim((string) $detail) !== '') $message .= ' ' . trim((string) $detail);
+            $message .= $responseDetail($response);
+
+            return $failure($message);
+        }
+        if (!is_array($payload) || $payload === []) {
+            return $failure('UptimeKit returned HTTP ' . $response->status() . ' but the status page response was empty or not a JSON object.' . $responseDetail($response));
+        }
+        if (isset($payload['data']) && (!is_array($payload['data']) || $payload['data'] === [])) {
+            return $failure('UptimeKit returned HTTP ' . $response->status() . ' but its status page data was empty.' . $responseDetail($response));
+        }
+
+        return redirect()->route('admin.extensions.uptimekit.index')->with('uptimekitTest', [
+            'ok' => true,
+            'message' => 'UptimeKit responded successfully for the configured status page.',
+        ]);
     }
 }
 

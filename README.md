@@ -60,10 +60,10 @@ When a public status page is available, an external link opens it in a new tab f
 
 An administrator configures the integration from the Pterodactyl extension settings page:
 
-1. Enter the UptimeKit API URL.
+1. Enter the UptimeKit JSON API base URL. For the standard UptimeKit deployment this ends in /api/rpc; do not use the dashboard or public status-page URL.
 2. Enter the UptimeKit organization slug.
 3. Add an UptimeKit API key with permission to read and manage maintenance windows.
-4. Enter the UptimeKit status page ID.
+4. Enter the UptimeKit status page API ID. This is separate from the organization slug and does not match the public status-page slug or URL.
 5. Add a mapping for each Pterodactyl server.
 6. Enter one or more UptimeKit monitor IDs for each server.
 7. Choose whether the server's Stop and Kill controls require an active maintenance window.

@@ -169,12 +169,27 @@
 <div class="row">
   <div class="col-xs-12">
     <div class="box uptimekit-config-box">
+      @if ($errors->any())
+        <div class="alert alert-danger" role="alert">
+          <ul style="margin: 0; padding-left: 20px;">
+            @foreach ($errors->all() as $error)
+              <li>{{ $error }}</li>
+            @endforeach
+          </ul>
+        </div>
+      @endif
+      @if (session('uptimekitTest'))
+        @php($uptimekitTest = session('uptimekitTest'))
+        <div class="alert {{ $uptimekitTest['ok'] ? 'alert-success' : 'alert-danger' }}" role="alert">
+          {{ $uptimekitTest['message'] }}
+        </div>
+      @endif
       <form action="{{ $root }}" method="POST">
         <div class="box-body">
           <div class="form-group">
             <label for="apiUrl">API URL</label>
-            <input id="apiUrl" name="apiUrl" type="url" class="form-control" value="{{ old('apiUrl', $apiUrl) }}" placeholder="https://api.example.com" required>
-            <p class="help-block">The base URL of the UptimeKit API that the panel will call.</p>
+            <input id="apiUrl" name="apiUrl" type="url" class="form-control" value="{{ old('apiUrl', $apiUrl) }}" placeholder="https://api.example.com/api/rpc" required>
+            <p class="help-block">The JSON API base URL that the panel will call. UptimeKit deployments usually expose this at <code>/api/rpc</code>; do not enter the dashboard or public status-page URL.</p>
           </div>
 
           <div class="form-group">
@@ -204,7 +219,7 @@
           <div class="form-group">
             <label for="statusPageId">UptimeKit status page ID</label>
             <input id="statusPageId" name="statusPageId" type="text" class="form-control" value="{{ old('statusPageId', $statusPageId) }}" placeholder="status-page-id" required>
-            <p class="help-block">The status page where maintenance windows for this panel should appear.</p>
+            <p class="help-block">The API ID of the status page where maintenance windows should appear. This is separate from the organization slug and does not match the public status-page slug or URL.</p>
           </div>
 
           <div class="form-group uptimekit-mapping-section">
@@ -257,6 +272,7 @@
 
         <div class="box-footer">
           {{ csrf_field() }}
+          <button type="submit" name="_method" value="POST" class="btn btn-default">Test UptimeKit connection</button>
           <button type="submit" name="_method" value="PATCH" class="btn btn-primary">Save configuration</button>
         </div>
       </form>

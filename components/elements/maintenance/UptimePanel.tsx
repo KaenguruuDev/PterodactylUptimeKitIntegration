@@ -71,7 +71,12 @@ export const UptimePanel = ({
             </div>
           </div>
           {error ? (
-            <p className={"text-xs text-red-200"}>{error}</p>
+            <p
+              className={"break-words whitespace-pre-wrap text-xs text-red-200"}
+              role={"alert"}
+            >
+              {error}
+            </p>
           ) : (
             <>
               <div
