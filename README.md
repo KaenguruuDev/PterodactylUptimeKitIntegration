@@ -66,7 +66,8 @@ An administrator configures the integration from the Pterodactyl extension setti
 4. Enter the UptimeKit status page API ID. This is separate from the organization slug and does not match the public status-page slug or URL.
 5. Add a mapping for each Pterodactyl server.
 6. Enter one or more UptimeKit monitor IDs for each server.
-7. Choose whether the server's Stop and Kill controls require an active maintenance window.
+7. Enter the public status-page URL to open from that server.
+8. Choose whether the server's Stop and Kill controls require an active maintenance window.
 
 HTTPS is required for the UptimeKit API URL by default. A developer option can allow HTTP for local testing, but it sends the API key without transport encryption and must not be enabled for production endpoints.
 

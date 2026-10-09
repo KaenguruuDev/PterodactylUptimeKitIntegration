@@ -159,24 +159,7 @@ return static function (
         if ($incidents === null) return $invalidPayload('incidents', $incidentPayload, $incidentResponse);
         $maintenances = $extractList($maintenancePayload, 'data');
         if ($maintenances === null) return $invalidPayload('maintenance', $maintenancePayload, $maintenanceResponse);
-        $statusPageUrl = null;
-        if (is_array($statusPage)) {
-            $candidateUrl = $statusPage['url'] ?? $statusPage['publicUrl'] ?? null;
-            if (is_string($candidateUrl) && filter_var($candidateUrl, FILTER_VALIDATE_URL)) {
-                $statusPageUrl = $candidateUrl;
-            } elseif (!empty($statusPage['domain']) && is_string($statusPage['domain'])) {
-                $statusPageUrl = preg_match('#^https?://#i', $statusPage['domain'])
-                    ? rtrim($statusPage['domain'], '/')
-                    : 'https://' . rtrim($statusPage['domain'], '/');
-            } elseif (!empty($statusPage['slug']) && is_string($statusPage['slug'])) {
-                $apiParts = parse_url($config['apiUrl']);
-                if (!empty($apiParts['scheme']) && !empty($apiParts['host'])) {
-                    $statusPageUrl = $apiParts['scheme'] . '://' . $apiParts['host']
-                        . (!empty($apiParts['port']) ? ':' . $apiParts['port'] : '')
-                        . '/' . rawurlencode($statusPage['slug']);
-                }
-            }
-        }
+        $statusPageUrl = $config['statusPageUrl'] !== '' ? $config['statusPageUrl'] : null;
         $mappedIds = array_fill_keys($config['monitorIds'], true);
         $overlapsMappedMonitor = static function (array $item) use ($monitorIdsFrom, $mappedIds): bool {
             foreach ($monitorIdsFrom($item) as $id) if (isset($mappedIds[$id])) return true;

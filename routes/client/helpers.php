@@ -15,11 +15,17 @@ return [
         $isStructuredMapping = is_array($mapping) && array_key_exists('monitorIds', $mapping);
         $monitorIds = $isStructuredMapping ? ($mapping['monitorIds'] ?? []) : $mapping;
         $monitorIds = is_array($monitorIds) ? array_values($monitorIds) : [$monitorIds];
+        $statusPageUrl = $isStructuredMapping ? trim((string) ($mapping['statusPageUrl'] ?? '')) : '';
+        $statusPageScheme = strtolower((string) parse_url($statusPageUrl, PHP_URL_SCHEME));
+        if ($statusPageUrl === '' || !filter_var($statusPageUrl, FILTER_VALIDATE_URL) || !in_array($statusPageScheme, ['http', 'https'], true)) {
+            $statusPageUrl = '';
+        }
 
         return [
             'serverId' => $serverId,
             'monitorIds' => array_values(array_filter($monitorIds)),
             'enforceStop' => $isStructuredMapping ? (bool) ($mapping['enforceStop'] ?? true) : true,
+            'statusPageUrl' => $statusPageUrl,
             'statusPageId' => (string) ($blueprint->dbGet('uptimekit', 'statusPageId') ?? ''),
             'apiUrl' => rtrim((string) ($blueprint->dbGet('uptimekit', 'apiUrl') ?? ''), '/'),
             'allowInsecureApiUrl' => (bool) ($blueprint->dbGet('uptimekit', 'allowInsecureApiUrl') ?? false),

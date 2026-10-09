@@ -55,14 +55,17 @@ class UptimekitExtensionController extends Controller
         $mapping = [];
         $serverUuids = $request->input('mappingServerUuids', []);
         $monitorIds = $request->input('mappingMonitorIds', []);
+        $statusPageUrls = $request->input('mappingStatusPageUrls', []);
         $enforceStops = $request->input('mappingEnforceStop', []);
         foreach ($serverUuids as $index => $serverUuid) {
             $serverUuid = trim((string) $serverUuid);
             $monitors = array_values(array_filter(array_map('trim', explode(',', (string) ($monitorIds[$index] ?? '')))));
+            $statusPageUrl = trim((string) ($statusPageUrls[$index] ?? ''));
             if ($serverUuid !== '' && count($monitors) > 0) {
                 $mapping[$serverUuid] = [
                     'monitorIds' => $monitors,
                     'enforceStop' => (string) ($enforceStops[$index] ?? '1') === '1',
+                    'statusPageUrl' => $statusPageUrl,
                 ];
             }
         }
@@ -183,6 +186,18 @@ class UptimekitSettingsFormRequest extends AdminFormRequest
             'mappingServerUuids.*' => ['nullable', 'string', 'max:255'],
             'mappingMonitorIds' => ['nullable', 'array'],
             'mappingMonitorIds.*' => ['nullable', 'string', 'max:2048'],
+            'mappingStatusPageUrls' => ['nullable', 'array'],
+            'mappingStatusPageUrls.*' => [
+                'nullable',
+                'url',
+                'max:2048',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $scheme = strtolower((string) parse_url((string) $value, PHP_URL_SCHEME));
+                    if (!in_array($scheme, ['http', 'https'], true)) {
+                        $fail('The status page URL must use HTTP or HTTPS.');
+                    }
+                },
+            ],
         ];
     }
 
@@ -196,6 +211,7 @@ class UptimekitSettingsFormRequest extends AdminFormRequest
             'statusPageId' => 'status page ID',
             'mappingServerUuids' => 'server UUID mappings',
             'mappingMonitorIds' => 'monitor ID mappings',
+            'mappingStatusPageUrls' => 'status page URL mappings',
         ];
     }
 }

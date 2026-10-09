@@ -1,18 +1,19 @@
 @php
-  $decodedMappings = json_decode($serverMonitorMappings, true);
-  $mappingRows = [];
-  if (is_array($decodedMappings)) {
-    foreach ($decodedMappings as $serverUuid => $mapping) {
-      $isStructuredMapping = is_array($mapping) && array_key_exists('monitorIds', $mapping);
-      $monitorIds = $isStructuredMapping ? $mapping['monitorIds'] : $mapping;
-      $mappingRows[] = [
-        'serverUuid' => $serverUuid,
-        'monitorIds' => is_array($monitorIds) ? implode(', ', $monitorIds) : $monitorIds,
-        'enforceStop' => $isStructuredMapping ? ($mapping['enforceStop'] ?? true) : true,
-      ];
-    }
-  }
-  if (count($mappingRows) === 0) $mappingRows[] = ['serverUuid' => '', 'monitorIds' => '', 'enforceStop' => true];
+$decodedMappings = json_decode($serverMonitorMappings, true);
+$mappingRows = [];
+if (is_array($decodedMappings)) {
+foreach ($decodedMappings as $serverUuid => $mapping) {
+$isStructuredMapping = is_array($mapping) && array_key_exists('monitorIds', $mapping);
+$monitorIds = $isStructuredMapping ? $mapping['monitorIds'] : $mapping;
+$mappingRows[] = [
+'serverUuid' => $serverUuid,
+'monitorIds' => is_array($monitorIds) ? implode(', ', $monitorIds) : $monitorIds,
+'statusPageUrl' => $isStructuredMapping ? ($mapping['statusPageUrl'] ?? '') : '',
+'enforceStop' => $isStructuredMapping ? ($mapping['enforceStop'] ?? true) : true,
+];
+}
+}
+if (count($mappingRows) === 0) $mappingRows[] = ['serverUuid' => '', 'monitorIds' => '', 'statusPageUrl' => '', 'enforceStop' => true];
 @endphp
 
 <style>
@@ -123,10 +124,11 @@
   }
 
   @media (min-width: 768px) {
+
     .uptimekit-mapping-table-header,
     .uptimekit-mapping-row {
       display: grid;
-      grid-template-columns: 4fr 4fr 3fr 1fr;
+      grid-template-columns: 3fr 3fr 4fr 2fr 1fr;
       column-gap: 20px;
     }
 
@@ -143,8 +145,8 @@
       padding: 0 15px;
     }
 
-    .uptimekit-mapping-table-header > [class*='col-'],
-    .uptimekit-mapping-row > [class*='col-'] {
+    .uptimekit-mapping-table-header>[class*='col-'],
+    .uptimekit-mapping-row>[class*='col-'] {
       float: none;
       width: auto;
       min-width: 0;
@@ -170,19 +172,19 @@
   <div class="col-xs-12">
     <div class="box uptimekit-config-box">
       @if ($errors->any())
-        <div class="alert alert-danger" role="alert">
-          <ul style="margin: 0; padding-left: 20px;">
-            @foreach ($errors->all() as $error)
-              <li>{{ $error }}</li>
-            @endforeach
-          </ul>
-        </div>
+      <div class="alert alert-danger" role="alert">
+        <ul style="margin: 0; padding-left: 20px;">
+          @foreach ($errors->all() as $error)
+          <li>{{ $error }}</li>
+          @endforeach
+        </ul>
+      </div>
       @endif
       @if (session('uptimekitTest'))
-        @php($uptimekitTest = session('uptimekitTest'))
-        <div class="alert {{ $uptimekitTest['ok'] ? 'alert-success' : 'alert-danger' }}" role="alert">
-          {{ $uptimekitTest['message'] }}
-        </div>
+      @php($uptimekitTest = session('uptimekitTest'))
+      <div class="alert {{ $uptimekitTest['ok'] ? 'alert-success' : 'alert-danger' }}" role="alert">
+        {{ $uptimekitTest['message'] }}
+      </div>
       @endif
       <form action="{{ $root }}" method="POST">
         <div class="box-body">
@@ -200,7 +202,7 @@
 
           <div class="form-group">
             <label for="apiKey">API key</label>
-            <input id="apiKey" name="apiKey" type="password" class="form-control" value="" autocomplete="new-password"{{ $apiKeyConfigured ? '' : ' required' }}>
+            <input id="apiKey" name="apiKey" type="password" class="form-control" value="" autocomplete="new-password" {{ $apiKeyConfigured ? '' : ' required' }}>
             <p class="help-block">
               An UptimeKit API key with permission to read and manage maintenance windows.
               {{ $apiKeyConfigured ? 'A key is configured; leave this blank to keep it unchanged.' : 'No key is currently configured.' }}
@@ -227,44 +229,52 @@
               <p class="uptimekit-mapping-heading pull-left">Server monitor mappings</p>
               <button type="button" id="add-mapping" class="btn btn-primary btn-sm pull-right uptimekit-add-button"><i class="fa fa-plus" aria-hidden="true"></i>Add mapping</button>
             </div>
-            <p class="help-block">Map each Pterodactyl server to its UptimeKit monitors.</p>
+            <p class="help-block">Map each Pterodactyl server to its UptimeKit monitors and public status page.</p>
             <div id="server-monitor-mappings" class="uptimekit-mapping-list">
               <div class="row uptimekit-mapping-table-header">
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                   <label>Server UUID</label>
                   <p class="help-block">The UUID of the Pterodactyl server.</p>
                 </div>
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                   <label>Monitor IDs</label>
                   <p class="help-block">One or more UptimeKit monitor IDs, separated by commas.</p>
                 </div>
-                <div class="col-sm-3">
+                <div class="col-sm-4">
+                  <label>Public status page URL</label>
+                  <p class="help-block">The public URL opened from this server view.</p>
+                </div>
+                <div class="col-sm-2">
                   <label>Stop policy</label>
                   <p class="help-block">Blocks Stop/Kill until an active maintenance window exists. Uncheck to allow stopping anytime.</p>
                 </div>
               </div>
               @foreach ($mappingRows as $mappingRow)
-                <div class="row uptimekit-mapping-row well well-sm">
-                  <div class="col-sm-4 form-group">
-                    <label class="mapping-column-label">Server UUID</label>
-                    <input name="mappingServerUuids[]" type="text" class="form-control" value="{{ $mappingRow['serverUuid'] }}" placeholder="Pterodactyl server UUID">
-                  </div>
-                  <div class="col-sm-4 form-group">
-                    <label class="mapping-column-label">Monitor IDs</label>
-                    <input name="mappingMonitorIds[]" type="text" class="form-control" value="{{ $mappingRow['monitorIds'] }}" placeholder="UptimeKit monitor ID(s), comma-separated">
-                  </div>
-                  <div class="col-sm-3 form-group">
-                    <label class="mapping-column-label">Stop policy</label>
-                    <input name="mappingEnforceStop[]" type="hidden" value="{{ $mappingRow['enforceStop'] ? '1' : '0' }}">
-                    <label class="mapping-enforce-stop-label">
-                      <input class="mapping-enforce-stop" type="checkbox" {{ $mappingRow['enforceStop'] ? 'checked' : '' }}>
-                      Required
-                    </label>
-                  </div>
-                  <div class="col-sm-1 uptimekit-mapping-actions">
-                    <button type="button" class="btn btn-danger btn-sm remove-mapping" title="Remove server mapping" aria-label="Remove server mapping"><i class="fa fa-trash"></i></button>
-                  </div>
+              <div class="row uptimekit-mapping-row well well-sm">
+                <div class="col-sm-4 form-group">
+                  <label class="mapping-column-label">Server UUID</label>
+                  <input name="mappingServerUuids[]" type="text" class="form-control" value="{{ $mappingRow['serverUuid'] }}" placeholder="Pterodactyl server UUID">
                 </div>
+                <div class="col-sm-4 form-group">
+                  <label class="mapping-column-label">Monitor IDs</label>
+                  <input name="mappingMonitorIds[]" type="text" class="form-control" value="{{ $mappingRow['monitorIds'] }}" placeholder="UptimeKit monitor ID(s), comma-separated">
+                </div>
+                <div class="col-sm-4 form-group">
+                  <label class="mapping-column-label">Public status page URL</label>
+                  <input name="mappingStatusPageUrls[]" type="url" class="form-control" value="{{ $mappingRow['statusPageUrl'] }}" placeholder="https://status.example.com/status-page">
+                </div>
+                <div class="col-sm-2 form-group">
+                  <label class="mapping-column-label">Stop policy</label>
+                  <input name="mappingEnforceStop[]" type="hidden" value="{{ $mappingRow['enforceStop'] ? '1' : '0' }}">
+                  <label class="mapping-enforce-stop-label">
+                    <input class="mapping-enforce-stop" type="checkbox" {{ $mappingRow['enforceStop'] ? 'checked' : '' }}>
+                    Required
+                  </label>
+                </div>
+                <div class="col-sm-1 uptimekit-mapping-actions">
+                  <button type="button" class="btn btn-danger btn-sm remove-mapping" title="Remove server mapping" aria-label="Remove server mapping"><i class="fa fa-trash"></i></button>
+                </div>
+              </div>
               @endforeach
             </div>
           </div>
@@ -281,20 +291,22 @@
 </div>
 
 <script>
-  document.getElementById('add-mapping').addEventListener('click', function () {
+  document.getElementById('add-mapping').addEventListener('click', function() {
     var row = document.querySelector('.uptimekit-mapping-row').cloneNode(true);
-    row.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+    row.querySelectorAll('input').forEach(function(input) {
+      input.value = '';
+    });
     row.querySelector('.mapping-enforce-stop').checked = true;
     row.querySelector('input[name="mappingEnforceStop[]"]').value = '1';
     document.getElementById('server-monitor-mappings').appendChild(row);
   });
 
-  document.getElementById('server-monitor-mappings').addEventListener('change', function (event) {
+  document.getElementById('server-monitor-mappings').addEventListener('change', function(event) {
     if (!event.target.classList.contains('mapping-enforce-stop')) return;
     event.target.closest('.uptimekit-mapping-row').querySelector('input[name="mappingEnforceStop[]"]').value = event.target.checked ? '1' : '0';
   });
 
-  document.getElementById('server-monitor-mappings').addEventListener('click', function (event) {
+  document.getElementById('server-monitor-mappings').addEventListener('click', function(event) {
     if (!event.target.closest('.remove-mapping')) return;
     var rows = document.querySelectorAll('.uptimekit-mapping-row');
     if (rows.length > 1) event.target.closest('.uptimekit-mapping-row').remove();

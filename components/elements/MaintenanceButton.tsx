@@ -137,9 +137,11 @@ const MaintenanceButton = () => {
     if (cached && Date.now() - cached.fetchedAt < UPTIME_CACHE_TTL_MS) {
       setIsUptimeConfigured(cached.response.configured);
       setUptimeBuckets(cached.response.buckets || []);
-      setStatusPageUrl(
-        cached.response.statusPageUrl || statusPageUrlCache.get(serverId),
-      );
+      const cachedStatusPageUrl = cached.response.statusPageUrl || undefined;
+      if (cachedStatusPageUrl)
+        statusPageUrlCache.set(serverId, cachedStatusPageUrl);
+      else statusPageUrlCache.delete(serverId);
+      setStatusPageUrl(cachedStatusPageUrl);
       setUptimePercent(
         typeof cached.response.uptimePercent === "number"
           ? cached.response.uptimePercent
@@ -156,7 +158,7 @@ const MaintenanceButton = () => {
     setIsUptimeLoading(true);
     setUptimeError(undefined);
     setUptimeBuckets([]);
-    setStatusPageUrl(statusPageUrlCache.get(serverId));
+    setStatusPageUrl(undefined);
     setUptimePercent(undefined);
     void request<unknown>(`${serverApiPath}/uptime?range=${uptimeRange}`)
       .then((payload) => {
@@ -168,10 +170,10 @@ const MaintenanceButton = () => {
         });
         setIsUptimeConfigured(remote.configured);
         setUptimeBuckets(remote.buckets || []);
-        const nextStatusPageUrl =
-          remote.statusPageUrl || statusPageUrlCache.get(serverId);
-        if (remote.statusPageUrl)
-          statusPageUrlCache.set(serverId, remote.statusPageUrl);
+        const nextStatusPageUrl = remote.statusPageUrl || undefined;
+        if (nextStatusPageUrl)
+          statusPageUrlCache.set(serverId, nextStatusPageUrl);
+        else statusPageUrlCache.delete(serverId);
         setStatusPageUrl(nextStatusPageUrl);
         setUptimePercent(
           typeof remote.uptimePercent === "number"
@@ -184,7 +186,7 @@ const MaintenanceButton = () => {
         uptimeResponseCache.delete(cacheKey);
         setIsUptimeConfigured(false);
         setUptimeBuckets([]);
-        setStatusPageUrl(statusPageUrlCache.get(serverId));
+        setStatusPageUrl(undefined);
         setUptimePercent(undefined);
         setUptimeError(
           requestError instanceof Error
