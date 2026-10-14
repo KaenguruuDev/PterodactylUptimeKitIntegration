@@ -42,6 +42,8 @@ const MaintenanceButton = () => {
   const [windows, setWindows] = useState<MaintenanceWindow[]>([]);
   const [error, setError] = useState<string>();
   const [isConfigured, setIsConfigured] = useState(false);
+  const [isMaintenanceConfigLoaded, setIsMaintenanceConfigLoaded] =
+    useState(false);
   const [enforceStop, setEnforceStop] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [uptimeRange, setUptimeRange] = useState<UptimeRange>("24h");
@@ -106,19 +108,28 @@ const MaintenanceButton = () => {
   const hasActiveWindow = currentWindows.some(
     (window) => window.status === "in_progress",
   );
+  const shouldEnforceStop =
+    !isMaintenanceConfigLoaded || (isConfigured && enforceStop);
 
   useEffect(() => {
     let mounted = true;
+    setIsMaintenanceConfigLoaded(false);
+    setIsConfigured(false);
+    setEnforceStop(true);
+    setWindows([]);
+    setError(undefined);
     void request<MaintenanceListResponse>(`${serverApiPath}/maintenance`)
       .then((remote) => {
         if (!mounted) return;
         setIsConfigured(remote.configured);
         setEnforceStop(remote.enforceStop ?? true);
         setWindows(remote.windows || []);
+        setIsMaintenanceConfigLoaded(true);
       })
       .catch((requestError: unknown) => {
         if (!mounted) return;
         setIsConfigured(true);
+        setIsMaintenanceConfigLoaded(true);
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -216,7 +227,8 @@ const MaintenanceButton = () => {
         .forEach((button) => {
           if (!isStopControl(button)) return;
           const disabled =
-            serverStatus === "offline" || (enforceStop && !hasActiveWindow);
+            serverStatus === "offline" ||
+            (shouldEnforceStop && !hasActiveWindow);
           if (button.disabled !== disabled) button.disabled = disabled;
           button.title = disabled
             ? "Create an active maintenance window before stopping this server"
@@ -233,7 +245,7 @@ const MaintenanceButton = () => {
         target &&
         isStopControl(target) &&
         serverStatus !== "offline" &&
-        enforceStop &&
+        shouldEnforceStop &&
         !hasActiveWindow
       ) {
         event.preventDefault();
@@ -255,7 +267,7 @@ const MaintenanceButton = () => {
       observer.disconnect();
       document.removeEventListener("click", preventInactiveStop, true);
     };
-  }, [enforceStop, hasActiveWindow, serverStatus]);
+  }, [hasActiveWindow, serverStatus, shouldEnforceStop]);
 
   const resetEditor = () => {
     setEditingId(undefined);
