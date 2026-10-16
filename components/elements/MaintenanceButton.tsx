@@ -13,6 +13,7 @@ import {
 } from "./maintenance/types";
 import {
   UPTIME_CACHE_TTL_MS,
+  isMalformedUptimeResponse,
   parseUptimeResponse,
   request,
   statusPageUrlCache,
@@ -26,6 +27,12 @@ import {
 } from "./maintenance/utils";
 import { MaintenanceDialog } from "./maintenance/MaintenanceDialog";
 import { UptimePanel } from "./maintenance/UptimePanel";
+
+type OriginalStopControlState = {
+  disabled: boolean;
+  title: string | null;
+  ariaDisabled: string | null;
+};
 
 const MaintenanceButton = () => {
   const serverId = ServerContext.useStoreState(
@@ -44,6 +51,8 @@ const MaintenanceButton = () => {
   const [isConfigured, setIsConfigured] = useState(false);
   const [isMaintenanceConfigLoaded, setIsMaintenanceConfigLoaded] =
     useState(false);
+  const [maintenanceConfigServerId, setMaintenanceConfigServerId] =
+    useState<string>();
   const [enforceStop, setEnforceStop] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [uptimeRange, setUptimeRange] = useState<UptimeRange>("24h");
@@ -51,6 +60,9 @@ const MaintenanceButton = () => {
   const [isUptimeConfigured, setIsUptimeConfigured] = useState(false);
   const [isUptimeLoading, setIsUptimeLoading] = useState(true);
   const [uptimeError, setUptimeError] = useState<string>();
+  const [uptimeResultKey, setUptimeResultKey] = useState<string>();
+  const [isUptimePayloadMalformed, setIsUptimePayloadMalformed] =
+    useState(false);
   const [statusPageUrl, setStatusPageUrl] = useState<string>();
   const [uptimePercent, setUptimePercent] = useState<number>();
   const placeholderUptimeBuckets = useMemo(
@@ -108,12 +120,21 @@ const MaintenanceButton = () => {
   const hasActiveWindow = currentWindows.some(
     (window) => window.status === "in_progress",
   );
+  const maintenanceConfigApplies =
+    isMaintenanceConfigLoaded && maintenanceConfigServerId === serverId;
+  const uptimeResultApplies = uptimeResultKey === `${serverId}:${uptimeRange}`;
   const shouldEnforceStop =
-    !isMaintenanceConfigLoaded || (isConfigured && enforceStop);
+    !maintenanceConfigApplies || (isConfigured && enforceStop);
+  const stopPolicyDisabled =
+    shouldEnforceStop &&
+    (!maintenanceConfigApplies ||
+      !hasActiveWindow ||
+      (uptimeResultApplies && isUptimePayloadMalformed));
 
   useEffect(() => {
     let mounted = true;
     setIsMaintenanceConfigLoaded(false);
+    setMaintenanceConfigServerId(undefined);
     setIsConfigured(false);
     setEnforceStop(true);
     setWindows([]);
@@ -121,14 +142,18 @@ const MaintenanceButton = () => {
     void request<MaintenanceListResponse>(`${serverApiPath}/maintenance`)
       .then((remote) => {
         if (!mounted) return;
-        setIsConfigured(remote.configured);
-        setEnforceStop(remote.enforceStop ?? true);
+        setIsConfigured(remote.configured === true);
+        setEnforceStop(
+          remote.configured === true && remote.enforceStop === true,
+        );
         setWindows(remote.windows || []);
+        setMaintenanceConfigServerId(serverId);
         setIsMaintenanceConfigLoaded(true);
       })
       .catch((requestError: unknown) => {
         if (!mounted) return;
         setIsConfigured(true);
+        setMaintenanceConfigServerId(serverId);
         setIsMaintenanceConfigLoaded(true);
         setError(
           requestError instanceof Error
@@ -146,6 +171,8 @@ const MaintenanceButton = () => {
     const cacheKey = `${serverId}:${uptimeRange}`;
     const cached = uptimeResponseCache.get(cacheKey);
     if (cached && Date.now() - cached.fetchedAt < UPTIME_CACHE_TTL_MS) {
+      setUptimeResultKey(cacheKey);
+      setIsUptimePayloadMalformed(false);
       setIsUptimeConfigured(cached.response.configured);
       setUptimeBuckets(cached.response.buckets || []);
       const cachedStatusPageUrl = cached.response.statusPageUrl || undefined;
@@ -168,6 +195,8 @@ const MaintenanceButton = () => {
 
     setIsUptimeLoading(true);
     setUptimeError(undefined);
+    setUptimeResultKey(undefined);
+    setIsUptimePayloadMalformed(false);
     setUptimeBuckets([]);
     setStatusPageUrl(undefined);
     setUptimePercent(undefined);
@@ -179,6 +208,8 @@ const MaintenanceButton = () => {
           response: remote,
           fetchedAt: Date.now(),
         });
+        setUptimeResultKey(cacheKey);
+        setIsUptimePayloadMalformed(false);
         setIsUptimeConfigured(remote.configured);
         setUptimeBuckets(remote.buckets || []);
         const nextStatusPageUrl = remote.statusPageUrl || undefined;
@@ -195,6 +226,8 @@ const MaintenanceButton = () => {
       .catch((requestError: unknown) => {
         if (!mounted) return;
         uptimeResponseCache.delete(cacheKey);
+        setUptimeResultKey(cacheKey);
+        setIsUptimePayloadMalformed(isMalformedUptimeResponse(requestError));
         setIsUptimeConfigured(false);
         setUptimeBuckets([]);
         setStatusPageUrl(undefined);
@@ -214,6 +247,10 @@ const MaintenanceButton = () => {
   }, [serverApiPath, serverId, uptimeRange]);
 
   useEffect(() => {
+    const originalStates = new Map<
+      HTMLButtonElement,
+      OriginalStopControlState
+    >();
     const isStopControl = (button: HTMLButtonElement) => {
       const label = button.textContent
         ?.replace(/\s+/g, " ")
@@ -222,18 +259,50 @@ const MaintenanceButton = () => {
       return label === "stop" || label === "kill";
     };
     const syncStopControls = () => {
+      const nativeStopDisabled = serverStatus === "offline";
+      const policyHint = isUptimePayloadMalformed
+        ? "Stopping is disabled because UptimeKit returned malformed status data"
+        : "Create an active maintenance window before stopping this server";
       document
         .querySelectorAll<HTMLButtonElement>("button")
         .forEach((button) => {
           if (!isStopControl(button)) return;
-          const disabled =
-            serverStatus === "offline" ||
-            (shouldEnforceStop && !hasActiveWindow);
-          if (button.disabled !== disabled) button.disabled = disabled;
-          button.title = disabled
-            ? "Create an active maintenance window before stopping this server"
-            : "Stop the server";
-          button.setAttribute("aria-disabled", String(disabled));
+
+          const shouldDisable = nativeStopDisabled || stopPolicyDisabled;
+          if (shouldDisable && !originalStates.has(button)) {
+            originalStates.set(button, {
+              disabled: button.disabled,
+              title: button.getAttribute("title"),
+              ariaDisabled: button.getAttribute("aria-disabled"),
+            });
+          }
+
+          if (shouldDisable) button.disabled = true;
+
+          // Native Pterodactyl state (for example, an already stopped server)
+          // keeps its original hint. Only replace hints when this policy is the
+          // reason an otherwise enabled control is disabled.
+          const original = originalStates.get(button);
+          if (
+            stopPolicyDisabled &&
+            !nativeStopDisabled &&
+            original &&
+            !original.disabled
+          ) {
+            button.title = policyHint;
+            button.setAttribute("aria-disabled", "true");
+            return;
+          }
+
+          if (!shouldDisable && original) {
+            button.disabled = original.disabled;
+            if (original.title === null) button.removeAttribute("title");
+            else button.setAttribute("title", original.title);
+            if (original.ariaDisabled === null)
+              button.removeAttribute("aria-disabled");
+            else button.setAttribute("aria-disabled", original.ariaDisabled);
+            originalStates.delete(button);
+          }
         });
     };
     const preventInactiveStop = (event: MouseEvent) => {
@@ -245,8 +314,7 @@ const MaintenanceButton = () => {
         target &&
         isStopControl(target) &&
         serverStatus !== "offline" &&
-        shouldEnforceStop &&
-        !hasActiveWindow
+        stopPolicyDisabled
       ) {
         event.preventDefault();
         event.stopPropagation();
@@ -266,8 +334,16 @@ const MaintenanceButton = () => {
     return () => {
       observer.disconnect();
       document.removeEventListener("click", preventInactiveStop, true);
+      originalStates.forEach((original, button) => {
+        button.disabled = original.disabled;
+        if (original.title === null) button.removeAttribute("title");
+        else button.setAttribute("title", original.title);
+        if (original.ariaDisabled === null)
+          button.removeAttribute("aria-disabled");
+        else button.setAttribute("aria-disabled", original.ariaDisabled);
+      });
     };
-  }, [hasActiveWindow, serverStatus, shouldEnforceStop]);
+  }, [isUptimePayloadMalformed, serverId, serverStatus, stopPolicyDisabled]);
 
   const resetEditor = () => {
     setEditingId(undefined);
@@ -275,7 +351,7 @@ const MaintenanceButton = () => {
     setError(undefined);
   };
 
-  if (!isConfigured) return null;
+  if (!isConfigured && !error) return null;
 
   const editWindow = (window: MaintenanceWindow) => {
     setEditingId(window.id);

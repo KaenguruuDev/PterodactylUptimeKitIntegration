@@ -66,7 +66,7 @@ export const getStatus = (window: MaintenanceWindow) => {
   const now = Date.now();
   const start = new Date(window.startAt).getTime();
   const end = new Date(window.endAt).getTime();
-  if (start <= now && now <= end) return "in_progress" as const;
+  if (start <= now && now < end) return "in_progress" as const;
   return now < start ? ("scheduled" as const) : ("completed" as const);
 };
 

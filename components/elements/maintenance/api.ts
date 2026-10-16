@@ -17,6 +17,30 @@ export const uptimeResponseCache = new Map<
 >();
 export const statusPageUrlCache = new Map<string, string | undefined>();
 
+export class UptimePayloadError extends Error {
+  readonly category = "invalid_payload" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "UptimePayloadError";
+  }
+}
+
+export class ApiRequestError extends Error {
+  readonly upstreamCategory?: string;
+
+  constructor(message: string, upstreamCategory?: string) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.upstreamCategory = upstreamCategory;
+  }
+}
+
+export const isMalformedUptimeResponse = (error: unknown) =>
+  error instanceof UptimePayloadError ||
+  (error instanceof ApiRequestError &&
+    error.upstreamCategory === "invalid_payload");
+
 const uptimeStatuses: UptimeStatus[] = [
   "operational",
   "degraded",
@@ -31,7 +55,7 @@ const isUptimeStatus = (value: unknown): value is UptimeStatus =>
 
 export const parseUptimeResponse = (payload: unknown): UptimeResponse => {
   if (!payload || typeof payload !== "object")
-    throw new Error(
+    throw new UptimePayloadError(
       "UptimeKit returned an invalid uptime response: expected a JSON object.",
     );
 
@@ -42,7 +66,7 @@ export const parseUptimeResponse = (payload: unknown): UptimeResponse => {
     !uptimeRanges.includes(response.range as UptimeRange) ||
     !Array.isArray(response.buckets)
   ) {
-    throw new Error(
+    throw new UptimePayloadError(
       "UptimeKit returned an invalid uptime response: expected configured, range, and buckets fields.",
     );
   }
@@ -57,7 +81,7 @@ export const parseUptimeResponse = (payload: unknown): UptimeResponse => {
         typeof (bucket as Record<string, unknown>).endAt !== "string",
     )
   ) {
-    throw new Error(
+    throw new UptimePayloadError(
       "UptimeKit returned invalid uptime bucket data: each bucket needs a valid status, startAt, and endAt.",
     );
   }
@@ -66,7 +90,7 @@ export const parseUptimeResponse = (payload: unknown): UptimeResponse => {
     response.uptimePercent !== undefined &&
     typeof response.uptimePercent !== "number"
   ) {
-    throw new Error(
+    throw new UptimePayloadError(
       "UptimeKit returned an invalid uptime percentage: expected a number.",
     );
   }
@@ -111,10 +135,13 @@ export const request = async <T,>(
       typeof errorPayload?.upstreamStatus === "number"
         ? ` (UptimeKit HTTP ${errorPayload.upstreamStatus})`
         : "";
-    throw new Error(
+    throw new ApiRequestError(
       details && details !== message
         ? `${message} Details: ${details}${code}${upstreamStatus}`
         : `${message}${code}${upstreamStatus}`,
+      typeof errorPayload?.upstreamCategory === "string"
+        ? errorPayload.upstreamCategory
+        : undefined,
     );
   }
   return payload as T;

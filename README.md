@@ -36,7 +36,7 @@ Configure these values from the Pterodactyl extension settings page. Mapping fie
 | Server UUID | Pterodactyl server UUID | Identifies the server receiving a mapping | Add one row per server mapping. |
 | Monitor IDs | One or more IDs separated by commas | Assigns UptimeKit monitors to the server | Maintenance and incident history is filtered through these IDs. |
 | Public status page URL | Optional HTTP or HTTPS URL | Provides the link opened from the server view | This is a public link, not the API status page ID. |
-| Stop policy | Required or relaxed | Controls whether the panel enables Stop and Kill only during active maintenance | This is a browser UI aid, not server-side authorization. |
+| Stop policy | Required or relaxed | Controls whether the panel enables Stop and Kill only during active maintenance; malformed availability data also keeps them disabled | This is a browser UI aid, not server-side authorization. |
 
 After entering the values, use **Test UptimeKit connection**, then save the configuration.
 
@@ -52,7 +52,7 @@ When a public status-page URL is configured, the availability panel includes a l
 
 ## Permissions and stop policy
 
-The stop policy disables the visible **Stop** and **Kill** controls until the server has an active maintenance window. It is a panel UI workflow aid, not a server-side authorization boundary: users or API clients that already have Pterodactyl's `control.stop` permission can still call the underlying power API directly. Use Pterodactyl permissions when stopping a server must be prevented as an access-control rule.
+The stop policy disables the visible **Stop** and **Kill** controls until the server has an active maintenance window. It also keeps them disabled when the UptimeKit availability response is malformed. Native Pterodactyl disabled states and hints remain unchanged. This is a panel UI workflow aid, not a server-side authorization boundary: users or API clients that already have Pterodactyl's `control.stop` permission can still call the underlying power API directly. Use Pterodactyl permissions when stopping a server must be prevented as an access-control rule.
 
 ## Troubleshooting
 
